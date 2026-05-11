@@ -5,9 +5,11 @@ from pathlib import Path
 from typing import Iterable
 from urllib.parse import urlparse
 
-from ghost_amm.events import Event, write_jsonl
+from ghost_amm.events import Event, make_event, now_ms
+from ghost_amm.exchange.bitbank_public import BitbankPublicClient, pair_spec_event, status_event
 from ghost_amm.recorder.base import EventRecorder
 from ghost_amm.recorder.bitbank_normalizer import normalize_bitbank_message
+from ghost_amm.recorder.jsonl_writer import RotatingJsonlEventWriter
 
 
 class BitbankPublicRecorder(EventRecorder):
@@ -18,16 +20,33 @@ class BitbankPublicRecorder(EventRecorder):
         channels: Iterable[str] | None = None,
         out: str | Path,
         url: str = "wss://stream.bitbank.cc/socket.io/?EIO=4&transport=websocket",
+        public_rest_url: str = "https://public.bitbank.cc",
+        spot_rest_url: str = "https://api.bitbank.cc/v1",
         max_events: int | None = None,
         timeout_sec: float | None = 60.0,
+        fetch_metadata_on_start: bool = True,
+        rotate_every_events: int | None = None,
+        rotate_every_bytes: int | None = None,
+        flush_every_events: int = 1,
+        max_reconnects: int = 10,
+        reconnect_delay_sec: float = 3.0,
     ) -> None:
         self.pair = pair
         self.channels = list(channels or [f"ticker_{pair}", f"transactions_{pair}", f"depth_whole_{pair}", f"depth_diff_{pair}"])
         self.out = Path(out)
         self.url = url
+        self.public_rest_url = public_rest_url
+        self.spot_rest_url = spot_rest_url
         self.max_events = max_events
         self.timeout_sec = timeout_sec
+        self.fetch_metadata_on_start = fetch_metadata_on_start
+        self.rotate_every_events = rotate_every_events
+        self.rotate_every_bytes = rotate_every_bytes
+        self.flush_every_events = flush_every_events
+        self.max_reconnects = max_reconnects
+        self.reconnect_delay_sec = reconnect_delay_sec
         self.events: list[Event] = []
+        self.output_paths: list[Path] = []
 
     async def run(self) -> None:
         try:
@@ -35,36 +54,171 @@ class BitbankPublicRecorder(EventRecorder):
         except ModuleNotFoundError as exc:
             raise RuntimeError("python-socketio is optional; install ghost-amm[full] for public stream recording") from exc
 
-        sio = socketio.AsyncClient(logger=False, engineio_logger=False)
         done = asyncio.Event()
+        started_ms = now_ms()
+        with RotatingJsonlEventWriter(
+            self.out,
+            rotate_every_events=self.rotate_every_events,
+            rotate_every_bytes=self.rotate_every_bytes,
+            flush_every_events=self.flush_every_events,
+        ) as writer:
+            if self.fetch_metadata_on_start:
+                for event in self._metadata_events():
+                    self._record(event, writer)
+            reconnects = 0
+            while not done.is_set():
+                if self.timeout_sec is not None and now_ms() - started_ms >= self.timeout_sec * 1000:
+                    break
+                sio = socketio.AsyncClient(logger=False, engineio_logger=False, reconnection=False)
 
-        @sio.event
-        async def connect() -> None:
-            for channel in self.channels:
-                await sio.emit("join-room", channel)
+                @sio.event
+                async def connect() -> None:
+                    for channel in self.channels:
+                        await sio.emit("join-room", channel)
+                    self._record(
+                        make_event(
+                            "dry_run_heartbeat",
+                            ts_exchange=now_ms(),
+                            venue="bitbank",
+                            symbol=self.pair.upper().replace("_", "/"),
+                            payload={"mode": "record_bitbank_public", "connected": True, "reconnects": reconnects},
+                        ),
+                        writer,
+                    )
 
-        @sio.on("message")
-        async def message(data: object = None) -> None:
-            if not isinstance(data, dict):
-                return
-            room_name = str(data.get("room_name") or data.get("room") or "")
-            if not room_name:
-                return
-            self.events.extend(normalize_bitbank_message(room_name, data))
-            if self.max_events is not None and len(self.events) >= self.max_events:
-                done.set()
+                @sio.event
+                async def disconnect() -> None:
+                    self._record(
+                        make_event(
+                            "dry_run_heartbeat",
+                            ts_exchange=now_ms(),
+                            venue="bitbank",
+                            symbol=self.pair.upper().replace("_", "/"),
+                            payload={"mode": "record_bitbank_public", "connected": False, "reconnects": reconnects},
+                        ),
+                        writer,
+                    )
 
-        await sio.connect(_socketio_base_url(self.url), transports=["websocket"])
+                @sio.on("message")
+                async def message(data: object = None) -> None:
+                    if not isinstance(data, dict):
+                        return
+                    room_name = str(data.get("room_name") or data.get("room") or "")
+                    if not room_name:
+                        return
+                    for event in normalize_bitbank_message(room_name, data):
+                        self._record(event, writer)
+                    if self.max_events is not None and writer.total_events >= self.max_events:
+                        done.set()
+
+                try:
+                    await sio.connect(_socketio_base_url(self.url), transports=["websocket"])
+                    wait_timeout = None
+                    if self.timeout_sec is not None:
+                        elapsed_sec = (now_ms() - started_ms) / 1000
+                        wait_timeout = max(self.timeout_sec - elapsed_sec, 0.001)
+                    if wait_timeout is None:
+                        await done.wait()
+                    else:
+                        await asyncio.wait_for(done.wait(), timeout=wait_timeout)
+                except asyncio.TimeoutError:
+                    break
+                except Exception as exc:
+                    self._record(
+                        make_event(
+                            "risk_state",
+                            ts_exchange=now_ms(),
+                            venue="bitbank",
+                            symbol=self.pair.upper().replace("_", "/"),
+                            payload={
+                                "allow_quote": False,
+                                "allow_buy": False,
+                                "allow_sell": False,
+                                "reason": f"recording_connection_error:{type(exc).__name__}",
+                                "reconnects": reconnects,
+                            },
+                        ),
+                        writer,
+                    )
+                finally:
+                    if sio.connected:
+                        await sio.disconnect()
+
+                if done.is_set():
+                    break
+                reconnects += 1
+                if reconnects > self.max_reconnects:
+                    self._record(
+                        make_event(
+                            "risk_state",
+                            ts_exchange=now_ms(),
+                            venue="bitbank",
+                            symbol=self.pair.upper().replace("_", "/"),
+                            payload={
+                                "allow_quote": False,
+                                "allow_buy": False,
+                                "allow_sell": False,
+                                "reason": "recording_max_reconnects_exceeded",
+                                "reconnects": reconnects,
+                            },
+                        ),
+                        writer,
+                    )
+                    break
+                await asyncio.sleep(self.reconnect_delay_sec)
+            self.output_paths = writer.paths
+
+    def _record(self, event: Event, writer: RotatingJsonlEventWriter) -> None:
+        self.events.append(event)
+        writer.write(event)
+
+    def _metadata_events(self) -> list[Event]:
+        ts = now_ms()
+        symbol = self.pair.upper().replace("_", "/")
+        client = BitbankPublicClient(public_base_url=self.public_rest_url, spot_base_url=self.spot_rest_url)
         try:
-            if self.timeout_sec is None:
-                await done.wait()
-            else:
-                await asyncio.wait_for(done.wait(), timeout=self.timeout_sec)
-        except asyncio.TimeoutError:
-            pass
-        finally:
-            await sio.disconnect()
-            write_jsonl(self.out, self.events)
+            specs = client.fetch_pairs()
+            statuses = client.fetch_statuses()
+        except Exception as exc:
+            return [
+                make_event(
+                    "risk_state",
+                    ts_exchange=ts,
+                    venue="bitbank",
+                    symbol=symbol,
+                    payload={
+                        "allow_quote": False,
+                        "allow_buy": False,
+                        "allow_sell": False,
+                        "reason": f"metadata_fetch_failed:{type(exc).__name__}",
+                    },
+                )
+            ]
+        events: list[Event] = []
+        for spec in specs:
+            if spec.name == self.pair:
+                events.append(pair_spec_event(spec, ts_ms=ts, symbol=symbol))
+                break
+        for status in statuses:
+            if status.pair == self.pair:
+                events.append(status_event(status, ts_ms=ts + 1, symbol=symbol))
+                break
+        if not events:
+            events.append(
+                make_event(
+                    "risk_state",
+                    ts_exchange=ts,
+                    venue="bitbank",
+                    symbol=symbol,
+                    payload={
+                        "allow_quote": False,
+                        "allow_buy": False,
+                        "allow_sell": False,
+                        "reason": "metadata_pair_or_status_missing",
+                    },
+                )
+            )
+        return events
 
 
 def _socketio_base_url(url: str) -> str:

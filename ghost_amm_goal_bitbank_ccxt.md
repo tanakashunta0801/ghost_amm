@@ -1356,6 +1356,86 @@ multi-symbol JPY portfolio inventory surface
 
 Do not implement these until the MVP is working and tested.
 
+---
+
+## Implementation Status - 2026-05-11 JST
+
+Current milestone:
+
+```text
+MVP virtual-trading prototype is implemented.
+Current active next step is stable bitbank public-data recording for real-data event replay.
+```
+
+Completed:
+
+```text
+- Python package and CLI skeleton
+- default BTC/JPY / btc_jpy config
+- typed event model and JSONL serialization
+- synthetic bitbank-shaped event generator
+- bitbank public normalizer for ticker, transactions, depth_whole, depth_diff
+- bitbank pair/status REST validation
+- deterministic order-book reconstruction with monotonic sequence checks
+- fair-price, inventory, quote-surface, shock, risk, projector, fill-model pipeline
+- deterministic replay engine with Markdown/JSON/CSV reports
+- public-stream dry-run using public data only
+- CCXT wrapper that blocks private/order/withdrawal paths in MVP
+- live gate scaffolding that emits LiveOrderBlocked instead of real orders
+- tests for the major MVP safety and deterministic replay requirements
+```
+
+Verification already run:
+
+```text
+uv run --extra test pytest -q
+ghost-amm generate-synthetic --scenario sell_shock ...
+ghost-amm replay --events data/raw/sell_shock.jsonl ...
+ghost-amm validate-bitbank-rules --pair btc_jpy ...
+ghost-amm dry-run-bitbank-public --pair btc_jpy ... --max-events 20
+```
+
+New recorder-hardening work added after the MVP checkpoint:
+
+```text
+- record-bitbank-public writes pair spec and status metadata at the start of recording.
+- JSONL recording is flushed incrementally instead of only at process exit.
+- recorder supports event-count and byte-size file rotation.
+- recorder reconnects and rejoins public channels after connection failures.
+- recorder emits connection/error health events into the JSONL stream.
+- inspect-recording summarizes event coverage, channel rooms, depth sequence ordering, and replay readiness.
+- short live smoke recording was replayed successfully.
+```
+
+Recommended next command for real-data BK:
+
+```powershell
+uv run --with "python-socketio[client]>=5" --with aiohttp ghost-amm record-bitbank-public `
+  --pair btc_jpy `
+  --config configs/default.yaml `
+  --out data/raw/bitbank_btc_jpy_1h.jsonl `
+  --timeout-sec 3600 `
+  --rotate-every-bytes 104857600 `
+  --flush-every-events 1 `
+  --max-reconnects 100
+
+uv run ghost-amm inspect-recording data/raw/bitbank_btc_jpy_1h.jsonl --strict
+
+uv run ghost-amm replay `
+  --events data/raw/bitbank_btc_jpy_1h.jsonl `
+  --config configs/default.yaml `
+  --out data/reports/bitbank_btc_jpy_1h
+```
+
+Notes:
+
+```text
+- API keys are still not required for BK/replay.
+- A short recording can pass replay-minimal inspection even if no trade event occurs during a quiet window.
+- Use inspect-recording --strict for longer captures where all public channels should have emitted events.
+- Real order submission remains out of scope and blocked in MVP mode.
+```
+
 
 ---
 

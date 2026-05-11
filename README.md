@@ -33,6 +33,33 @@ uv run --extra full ghost-amm dry-run-bitbank-public `
   --max-events 500
 ```
 
+## Recording Real Public Data
+
+Use `record-bitbank-public` before real-data replay. It writes metadata first, flushes each JSONL event, reconnects on stream failures, and can rotate files for long runs.
+
+```powershell
+uv run --with "python-socketio[client]>=5" --with aiohttp ghost-amm record-bitbank-public `
+  --pair btc_jpy `
+  --config configs/default.yaml `
+  --out data/raw/bitbank_btc_jpy_1h.jsonl `
+  --timeout-sec 3600 `
+  --rotate-every-bytes 104857600 `
+  --flush-every-events 1 `
+  --max-reconnects 100
+```
+
+Inspect the recording before replay:
+
+```powershell
+uv run ghost-amm inspect-recording data/raw/bitbank_btc_jpy_1h.jsonl
+```
+
+For strict channel coverage, including observed ticker and trade events:
+
+```powershell
+uv run ghost-amm inspect-recording data/raw/bitbank_btc_jpy_1h.jsonl --strict
+```
+
 ## Safety Boundary
 
 - Default pair is `btc_jpy` / `BTC/JPY`.

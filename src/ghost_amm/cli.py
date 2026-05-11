@@ -4,7 +4,6 @@ import argparse
 import asyncio
 import json
 from dataclasses import asdict
-from pathlib import Path
 
 from ghost_amm.analytics.metrics import summarize
 from ghost_amm.analytics.report import write_report
@@ -14,6 +13,7 @@ from ghost_amm.events import read_jsonl, write_jsonl
 from ghost_amm.exchange.bitbank_public import BitbankPublicClient, cache_pair_rules
 from ghost_amm.exchange.ccxt_gateway import CcxtGateway, CcxtGatewayBlocked, CcxtGatewayConfig, CcxtGatewayError
 from ghost_amm.recorder.bitbank_public_recorder import BitbankPublicRecorder
+from ghost_amm.recorder.inspection import inspect_recording
 from ghost_amm.recorder.mock_recorder import generate_synthetic_events
 from ghost_amm.replay.engine import ReplayEngine
 
@@ -40,10 +40,17 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("record-bitbank-public")
     p.add_argument("--pair", default="btc_jpy")
+    p.add_argument("--config", default="configs/default.yaml")
     p.add_argument("--channels", default="ticker,transactions,depth_whole,depth_diff")
     p.add_argument("--out", required=True)
     p.add_argument("--max-events", type=int, default=None)
     p.add_argument("--timeout-sec", type=float, default=60.0)
+    p.add_argument("--rotate-every-events", type=int, default=None)
+    p.add_argument("--rotate-every-bytes", type=int, default=None)
+    p.add_argument("--flush-every-events", type=int, default=1)
+    p.add_argument("--max-reconnects", type=int, default=10)
+    p.add_argument("--reconnect-delay-sec", type=float, default=3.0)
+    p.add_argument("--no-metadata", action="store_true")
 
     p = sub.add_parser("dry-run-bitbank-public")
     p.add_argument("--pair", default="btc_jpy")
@@ -61,6 +68,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--pair", default="btc_jpy")
     p.add_argument("--config", default="configs/default.yaml")
     p.add_argument("--cache", default="data/replay/bitbank_pair_rules.json")
+
+    p = sub.add_parser("inspect-recording")
+    p.add_argument("events", nargs="+")
+    p.add_argument("--strict", action="store_true")
 
     args = parser.parse_args(argv)
 
@@ -90,10 +101,26 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "record-bitbank-public":
+        config = load_config(args.config)
         channels = _expand_channels(args.channels, args.pair)
-        recorder = BitbankPublicRecorder(pair=args.pair, channels=channels, out=args.out, max_events=args.max_events, timeout_sec=args.timeout_sec)
+        recorder = BitbankPublicRecorder(
+            pair=args.pair,
+            channels=channels,
+            out=args.out,
+            url=str(config.get("bitbank.public_ws_url")),
+            public_rest_url=str(config.get("bitbank.public_rest_url")),
+            spot_rest_url=str(config.get("bitbank.private_rest_url")),
+            max_events=args.max_events,
+            timeout_sec=args.timeout_sec,
+            fetch_metadata_on_start=not args.no_metadata,
+            rotate_every_events=args.rotate_every_events,
+            rotate_every_bytes=args.rotate_every_bytes,
+            flush_every_events=args.flush_every_events,
+            max_reconnects=args.max_reconnects,
+            reconnect_delay_sec=args.reconnect_delay_sec,
+        )
         asyncio.run(recorder.run())
-        print(json.dumps({"out": args.out}, sort_keys=True))
+        print(json.dumps({"events": len(recorder.events), "out": args.out, "files": [str(path) for path in recorder.output_paths]}, sort_keys=True))
         return 0
 
     if args.command == "dry-run-bitbank-public":
@@ -136,6 +163,11 @@ def main(argv: list[str] | None = None) -> int:
         }
         print(json.dumps(result, sort_keys=True))
         return 0 if result["ok"] else 1
+
+    if args.command == "inspect-recording":
+        result = inspect_recording(args.events, strict=args.strict)
+        print(json.dumps(result.to_dict(), ensure_ascii=False, sort_keys=True))
+        return 0 if result.ok_for_replay else 1
 
     return 1
 
