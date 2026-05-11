@@ -1,0 +1,20 @@
+{
+  "average_adverse_1s": 10959.5,
+  "average_adverse_30s": 10959.5,
+  "average_adverse_5s": 10959.5,
+  "average_spread_captured": 4959.5,
+  "best_fill": 9949.0,
+  "fees_paid": 0.0,
+  "fill_rate": 0.05555555555555555,
+  "max_drawdown": 0.0,
+  "max_inventory_skew": 0.10038424591738715,
+  "pnl_by_shock_event": -97.80810000002384,
+  "pnl_outside_shock_events": 0.0,
+  "realized_pnl": 0.0,
+  "risk_blocked_quote_count": 12,
+  "total_pnl": -97.80810000002384,
+  "unrealized_pnl": -97.80810000002384,
+  "virtual_fills": 2,
+  "virtual_orders": 36,
+  "worst_fill": -30.0
+}

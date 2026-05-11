@@ -1,0 +1,103 @@
+symbol: BTC/JPY
+venue: synthetic_bitbank
+market_type: spot
+pair: btc_jpy
+
+bitbank:
+  public_ws_url: "wss://stream.bitbank.cc/socket.io/?EIO=4&transport=websocket"
+  public_rest_url: "https://public.bitbank.cc"
+  private_rest_url: "https://api.bitbank.cc/v1"
+  pair: btc_jpy
+  channels:
+    - ticker_btc_jpy
+    - transactions_btc_jpy
+    - depth_whole_btc_jpy
+    - depth_diff_btc_jpy
+  fetch_pair_spec_on_start: true
+  fetch_status_on_start: true
+  require_status_normal: true
+  require_post_only: true
+  forbid_market_orders: true
+  forbid_margin_orders: true
+  forbid_withdrawal_endpoints: true
+  sequence_policy: monotonic_not_consecutive
+  block_on_crossed_book: true
+  clock_drift_limit_ms: 1000
+
+ccxt:
+  enabled: true
+  exchange_id: bitbank
+  public_rest_only_in_mvp: true
+  allow_private_calls: false
+  allow_order_submission: false
+  forbid_withdrawal_methods: true
+  use_enable_rate_limit: true
+  require_official_bitbank_docs_override: true
+
+execution:
+  mode: replay
+  venue: bitbank
+  enable_live_orders: false
+  require_live_env_var: true
+  live_env_var_name: GHOST_AMM_ENABLE_LIVE
+  live_env_var_value: I_ACCEPT_RISK
+  cancel_on_start: false
+  refuse_if_unmanaged_orders_exist: true
+  max_active_orders_per_pair: 20
+  post_only_only: true
+
+market:
+  stale_after_ms: 3000
+  max_spread_bps: 50
+  min_depth_20bps_jpy: 5000000
+  reject_circuit_break_book: true
+
+inventory:
+  initial_base_qty: 0.01
+  initial_quote_qty: 150000
+  target_base_ratio: 0.5
+  max_abs_skew: 0.35
+  negative_balances_allowed: false
+
+amm:
+  levels: 6
+  base_order_size: 0.0002
+  half_spread_bps: 8
+  step_bps: 10
+  skew_strength_bps: 80
+  size_skew_strength: 3.0
+  min_order_size_fallback: 0.0001
+  max_order_size: 0.002
+  tick_size_fallback_jpy: 1
+  lot_size_fallback_btc: 0.0001
+  use_bitbank_pair_spec_rounding: true
+
+shock:
+  forced_flow_window_ms: 5000
+  depth_bps: 20
+  threshold: 1.0
+  temperature: 1.5
+  minimum_wait_after_shock_ms: 2000
+  activation_decay_ms: 30000
+  min_activation_to_quote: 0.15
+  infer_from_bitbank_transactions: true
+  infer_from_depth_thinning: true
+  infer_from_spread_widening: true
+
+fill_model:
+  queue_ahead_multiplier: 1.5
+  maker_fee_bps_fallback: 0
+  taker_fee_bps_fallback: 10
+  use_bitbank_dynamic_fee_rates: true
+  latency_ms: 150
+  cancel_latency_ms: 150
+  min_resting_time_ms: 500
+
+risk:
+  max_drawdown_pct: 5
+  max_daily_loss_pct: 3
+  max_virtual_fills_per_minute: 20
+  block_on_sequence_ordering_violation: true
+  block_on_bitbank_status_not_normal: true
+  block_on_pair_stop_flags: true
+  block_on_unfetched_pair_spec: true

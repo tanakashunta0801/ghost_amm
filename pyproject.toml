@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ghost-amm"
+version = "0.1.0"
+description = "Ghost AMM / Forced-Flow Sponge research bot MVP for bitbank BTC/JPY"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Proprietary" }
+authors = [{ name = "ghost_amm" }]
+dependencies = []
+
+[project.optional-dependencies]
+full = [
+  "ccxt>=4",
+  "python-socketio[client]>=5",
+  "pyarrow>=15",
+  "pandas>=2",
+  "pyyaml>=6",
+]
+test = [
+  "pytest>=8",
+]
+
+[project.scripts]
+ghost-amm = "ghost_amm.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

@@ -1,0 +1,138 @@
+from __future__ import annotations
+
+from dataclasses import asdict
+
+from ghost_amm.amm.inventory import InventoryState
+from ghost_amm.amm.projector import OrderProjector
+from ghost_amm.amm.quote_surface import QuoteSurface
+from ghost_amm.config import Config
+from ghost_amm.events import Event, make_event
+from ghost_amm.exchange.bitbank_rules import BitbankPairSpec, BitbankStatus
+from ghost_amm.market.fair_price import FairPriceEngine, FairPriceState
+from ghost_amm.market.orderbook import OrderBook
+from ghost_amm.market.shock import ShockActivator, ShockState
+from ghost_amm.replay.fill_model import ConservativeQueueFillModel
+from ghost_amm.risk.kernel import RiskDecision, RiskKernel
+
+
+class GhostAmmPipeline:
+    """Shared replay/dry-run processing path."""
+
+    def __init__(self, config: Config) -> None:
+        self.config = config
+        symbol = str(config.get("symbol", "BTC/JPY"))
+        venue = str(config.get("execution.venue", "bitbank"))
+        inv_cfg = config.section("inventory")
+        self.inventory = InventoryState(
+            base_qty=float(inv_cfg.get("initial_base_qty", 0.01)),
+            quote_qty=float(inv_cfg.get("initial_quote_qty", 150_000)),
+            target_base_ratio=float(inv_cfg.get("target_base_ratio", 0.5)),
+            negative_balances_allowed=bool(inv_cfg.get("negative_balances_allowed", False)),
+        )
+        self.book = OrderBook(venue=venue, symbol=symbol)
+        self.fair_engine = FairPriceEngine(
+            max_spread_bps=float(config.get("market.max_spread_bps", 50)),
+            stale_after_ms=float(config.get("market.stale_after_ms", 3000)),
+        )
+        risk_cfg = dict(config.section("risk"))
+        risk_cfg["max_abs_skew"] = inv_cfg.get("max_abs_skew", 10)
+        self.risk = RiskKernel(
+            market_cfg=config.section("market"),
+            risk_cfg=risk_cfg,
+            shock_cfg=config.section("shock"),
+            amm_cfg=config.section("amm"),
+        )
+        self.shock = ShockActivator.from_config(config.section("shock"))
+        self.projector = OrderProjector(max_active_orders=int(config.get("execution.max_active_orders_per_pair", 20)))
+        self.fill_model = ConservativeQueueFillModel.from_config(config.section("fill_model"))
+        self.pair_spec: BitbankPairSpec | None = None
+        self.status: BitbankStatus | None = None
+        self.last_fair = FairPriceState(None, 0, None, False, "not_initialized")
+        self.last_shock = ShockState(0.0, 0.0, 0.0, 0.0, 0.0, None, "not_initialized")
+        self.last_risk = RiskDecision(False, False, False, 0.0, "not_initialized")
+
+    def process(self, event: Event) -> list[Event]:
+        emitted: list[Event] = []
+        self._ingest_metadata(event)
+        if event.event_type in {"order_book_snapshot", "order_book_delta"}:
+            self.book.apply_event(event)
+
+        fair_state = self.fair_engine.from_orderbook(self.book, event.ts_exchange)
+        self.last_fair = fair_state
+        if fair_state.fair is not None:
+            emitted.append(
+                make_event(
+                    "mark_price",
+                    ts_exchange=event.ts_exchange,
+                    venue=event.venue,
+                    symbol=event.symbol,
+                    sequence=event.sequence,
+                    payload=asdict(fair_state),
+                )
+            )
+
+        shock_state, shock_event = self.shock.update(event, self.book, fair_state)
+        self.last_shock = shock_state
+        if shock_event:
+            emitted.append(shock_event)
+
+        fill_events = self.fill_model.on_market_event(event, fair_state)
+        for fill in fill_events:
+            self.inventory.apply_fill(
+                side=str(fill.payload["side"]),
+                price=float(fill.payload["fill_price"]),
+                amount=float(fill.payload["fill_size"]),
+                fee=float(fill.payload["fee"]),
+            )
+            self.projector.remove_filled(str(fill.payload["order_id"]))
+            emitted.append(fill)
+
+        risk_decision = self.risk.evaluate(
+            book=self.book,
+            fair_state=fair_state,
+            shock_state=shock_state,
+            inventory=self.inventory,
+            pair_spec=self.pair_spec,
+            status=self.status,
+            now_ms=event.ts_exchange,
+        )
+        self.last_risk = risk_decision
+        emitted.append(
+            make_event(
+                "risk_state",
+                ts_exchange=event.ts_exchange,
+                venue=event.venue,
+                symbol=event.symbol,
+                sequence=event.sequence,
+                payload=asdict(risk_decision) | {"activation": shock_state.activation},
+            )
+        )
+
+        quotes = []
+        if fair_state.is_valid and fair_state.fair is not None:
+            surface = QuoteSurface.from_config(self.config.section("amm"), self.pair_spec)
+            skew = self.inventory.skew(fair_state.fair) or 0.0
+            quotes = surface.generate(fair=fair_state.fair, inventory_skew=skew, activation=shock_state.activation)
+
+        projector_events = self.projector.sync(
+            quotes=quotes,
+            book=self.book,
+            risk=risk_decision,
+            now_ms=event.ts_exchange,
+            venue=event.venue,
+            symbol=event.symbol,
+        )
+        emitted.extend(projector_events)
+        for out in projector_events:
+            if out.event_type == "virtual_order_placed":
+                self.fill_model.on_virtual_order(out, self.book)
+            elif out.event_type == "virtual_order_canceled":
+                self.fill_model.on_cancel(out)
+        return emitted
+
+    def _ingest_metadata(self, event: Event) -> None:
+        if event.event_type == "bitbank_pair_spec":
+            self.pair_spec = BitbankPairSpec.from_api(event.payload)
+        elif event.event_type == "bitbank_status":
+            if "status" in event.payload and "min_amount" in event.payload:
+                self.status = BitbankStatus.from_api(event.payload)
