@@ -1405,6 +1405,7 @@ New recorder-hardening work added after the MVP checkpoint:
 - recorder emits connection/error health events into the JSONL stream.
 - inspect-recording summarizes event coverage, channel rooms, depth sequence ordering, and replay readiness.
 - short live smoke recording was replayed successfully.
+- socket.io message envelope normalization is fixed for live ticker/depth payloads.
 ```
 
 Recommended next command for real-data BK:
@@ -1434,6 +1435,7 @@ Notes:
 - A short recording can pass replay-minimal inspection even if no trade event occurs during a quiet window.
 - Use inspect-recording --strict for longer captures where all public channels should have emitted events.
 - Real order submission remains out of scope and blocked in MVP mode.
+- If a recording was started before the socket.io normalization fix, keep it only as raw evidence and rerun recording for replay/BK use.
 ```
 
 

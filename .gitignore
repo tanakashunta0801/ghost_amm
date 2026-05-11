@@ -5,3 +5,5 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+data/raw/bitbank_btc_jpy_*.jsonl
+data/reports/bitbank_btc_jpy_*/

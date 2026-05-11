@@ -7,7 +7,12 @@ from ghost_amm.events import Event, make_event, now_ms
 
 def normalize_bitbank_message(room_name: str, message: dict[str, Any], *, ts_local: float | None = None) -> list[Event]:
     ts_local = now_ms() if ts_local is None else ts_local
-    data = message.get("data", message)
+    envelope = message.get("message", message)
+    if not isinstance(envelope, dict):
+        envelope = message
+    data = envelope.get("data", envelope)
+    if not isinstance(data, dict):
+        data = {}
     pair = _pair_from_room(room_name)
     symbol = pair.upper().replace("_", "/")
     raw = {"room_name": room_name, "message": message}
@@ -92,8 +97,8 @@ def normalize_bitbank_message(room_name: str, message: dict[str, Any], *, ts_loc
             symbol=symbol,
             sequence=data.get("s"),
             payload={
-                "bids": data.get("b", []),
-                "asks": data.get("a", []),
+                "bids": data.get("b", data.get("bids", [])),
+                "asks": data.get("a", data.get("asks", [])),
                 "source": "bitbank_depth_diff",
             },
             raw_payload=raw,
