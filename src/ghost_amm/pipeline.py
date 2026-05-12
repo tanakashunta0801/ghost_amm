@@ -104,7 +104,24 @@ class GhostAmmPipeline:
                 venue=event.venue,
                 symbol=event.symbol,
                 sequence=event.sequence,
-                payload=asdict(risk_decision) | {"activation": shock_state.activation},
+                payload=asdict(risk_decision)
+                | {
+                    "activation": shock_state.activation,
+                    "force_ratio": shock_state.force_ratio,
+                    "recent_taker_buy_notional": shock_state.recent_taker_buy_notional,
+                    "recent_taker_sell_notional": shock_state.recent_taker_sell_notional,
+                    "depth_20bps": shock_state.depth_20bps,
+                    "shock_reason": shock_state.reason,
+                    "fair": fair_state.fair,
+                    "fair_is_valid": fair_state.is_valid,
+                    "fair_reason": fair_state.reason,
+                    "spread_bps": fair_state.spread_bps,
+                    "book_spread_bps": self.book.spread_bps(),
+                    "book_depth_20bps": self.book.depth_around_mid(20),
+                    "book_stale": self.book.stale,
+                    "book_stale_reason": self.book.stale_reason,
+                    "inventory_skew": self.inventory.skew(fair_state.fair),
+                },
             )
         )
 

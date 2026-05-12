@@ -1,0 +1,9 @@
+shock:
+  threshold: 0.01
+  min_activation_to_quote: 0.001
+  minimum_wait_after_shock_ms: 2000
+  activation_decay_ms: 30000
+
+market:
+  min_depth_20bps_jpy: 5000000
+  max_spread_bps: 50

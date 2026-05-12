@@ -7,6 +7,7 @@ from dataclasses import asdict
 
 from ghost_amm.analytics.metrics import summarize
 from ghost_amm.analytics.report import write_report
+from ghost_amm.analytics.risk_diagnostics import analyze_risk_blocks, write_risk_diagnostics
 from ghost_amm.config import Config, load_config
 from ghost_amm.dryrun.public_stream_engine import PublicStreamDryRunEngine
 from ghost_amm.events import read_jsonl, write_jsonl
@@ -72,6 +73,10 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("inspect-recording")
     p.add_argument("events", nargs="+")
     p.add_argument("--strict", action="store_true")
+
+    p = sub.add_parser("analyze-risk-blocks")
+    p.add_argument("--events", required=True, nargs="+")
+    p.add_argument("--out", required=True)
 
     args = parser.parse_args(argv)
 
@@ -168,6 +173,15 @@ def main(argv: list[str] | None = None) -> int:
         result = inspect_recording(args.events, strict=args.strict)
         print(json.dumps(result.to_dict(), ensure_ascii=False, sort_keys=True))
         return 0 if result.ok_for_replay else 1
+
+    if args.command == "analyze-risk-blocks":
+        events = []
+        for path in args.events:
+            events.extend(read_jsonl(path))
+        result = analyze_risk_blocks(events)
+        json_path, md_path = write_risk_diagnostics(args.out, result)
+        print(json.dumps({"json": str(json_path), "markdown": str(md_path), "blocked_events": result.blocked_events}, sort_keys=True))
+        return 0
 
     return 1
 
