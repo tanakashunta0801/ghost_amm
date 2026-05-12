@@ -23,9 +23,20 @@ class ActiveVirtualOrder:
 
 
 class OrderProjector:
-    def __init__(self, *, max_active_orders: int = 20, ttl_ms: float = 3000) -> None:
+    def __init__(
+        self,
+        *,
+        max_active_orders: int = 20,
+        ttl_ms: float = 3000,
+        min_replace_interval_ms: float = 0,
+        replace_threshold_bps: float = 0,
+        size_replace_threshold_ratio: float = 0,
+    ) -> None:
         self.max_active_orders = max_active_orders
         self.ttl_ms = ttl_ms
+        self.min_replace_interval_ms = min_replace_interval_ms
+        self.replace_threshold_bps = replace_threshold_bps
+        self.size_replace_threshold_ratio = size_replace_threshold_ratio
         self.active: dict[str, ActiveVirtualOrder] = {}
         self.counter = 0
 
@@ -46,13 +57,13 @@ class OrderProjector:
         desired_keys = {_key(q) for q in desired}
         events: list[Event] = []
         for key, order in list(self.active.items()):
-            if key not in desired_keys or now_ms >= order.expires_at:
+            if key not in desired_keys or now_ms >= order.expires_at or not self._active_post_only_safe(order, book, risk):
                 events.append(self._cancel_event(order, now_ms, venue, symbol, "stale_or_replaced"))
                 del self.active[key]
         for quote in desired:
             key = _key(quote)
             existing = self.active.get(key)
-            if existing and existing.price == quote.price and existing.size == quote.size:
+            if existing and self._should_keep_existing(existing, quote, now_ms):
                 continue
             if existing:
                 events.append(self._cancel_event(existing, now_ms, venue, symbol, "replaced"))
@@ -114,6 +125,24 @@ class OrderProjector:
             return risk.allow_buy and ask is not None and quote.price < ask
         bid = book.best_bid()
         return risk.allow_sell and bid is not None and quote.price > bid
+
+    def _active_post_only_safe(self, order: ActiveVirtualOrder, book: OrderBook, risk: RiskDecision) -> bool:
+        if order.side == "buy":
+            ask = book.best_ask()
+            return risk.allow_buy and ask is not None and order.price < ask
+        bid = book.best_bid()
+        return risk.allow_sell and bid is not None and order.price > bid
+
+    def _should_keep_existing(self, order: ActiveVirtualOrder, quote: Quote, now_ms: float) -> bool:
+        if now_ms >= order.expires_at:
+            return False
+        if order.price == quote.price and order.size == quote.size:
+            return True
+        if now_ms - order.created_at < self.min_replace_interval_ms:
+            return True
+        price_bps = abs(quote.price - order.price) / max(order.price, 1e-12) * 10_000
+        size_ratio = abs(quote.size - order.size) / max(order.size, 1e-12)
+        return price_bps <= self.replace_threshold_bps and size_ratio <= self.size_replace_threshold_ratio
 
     def _cancel_event(self, order: ActiveVirtualOrder, now_ms: float, venue: str, symbol: str, reason: str) -> Event:
         self.counter += 1

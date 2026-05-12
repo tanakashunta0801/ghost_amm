@@ -45,6 +45,10 @@ execution:
   refuse_if_unmanaged_orders_exist: true
   max_active_orders_per_pair: 20
   post_only_only: true
+  quote_ttl_ms: 3000
+  min_quote_replace_interval_ms: 0
+  quote_replace_threshold_bps: 0
+  size_replace_threshold_ratio: 0
 
 market:
   stale_after_ms: 3000

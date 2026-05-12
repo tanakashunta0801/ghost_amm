@@ -43,7 +43,13 @@ class GhostAmmPipeline:
             amm_cfg=config.section("amm"),
         )
         self.shock = ShockActivator.from_config(config.section("shock"))
-        self.projector = OrderProjector(max_active_orders=int(config.get("execution.max_active_orders_per_pair", 20)))
+        self.projector = OrderProjector(
+            max_active_orders=int(config.get("execution.max_active_orders_per_pair", 20)),
+            ttl_ms=float(config.get("execution.quote_ttl_ms", 3000)),
+            min_replace_interval_ms=float(config.get("execution.min_quote_replace_interval_ms", 0)),
+            replace_threshold_bps=float(config.get("execution.quote_replace_threshold_bps", 0)),
+            size_replace_threshold_ratio=float(config.get("execution.size_replace_threshold_ratio", 0)),
+        )
         self.fill_model = ConservativeQueueFillModel.from_config(config.section("fill_model"))
         self.pair_spec: BitbankPairSpec | None = None
         self.status: BitbankStatus | None = None

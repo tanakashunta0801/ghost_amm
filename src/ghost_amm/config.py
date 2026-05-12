@@ -43,6 +43,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "live_env_var_value": "I_ACCEPT_RISK",
         "max_active_orders_per_pair": 20,
         "post_only_only": True,
+        "quote_ttl_ms": 3000,
+        "min_quote_replace_interval_ms": 0,
+        "quote_replace_threshold_bps": 0,
+        "size_replace_threshold_ratio": 0,
     },
     "market": {
         "stale_after_ms": 3000,
