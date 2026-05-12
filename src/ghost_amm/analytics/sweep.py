@@ -132,16 +132,21 @@ def _render_markdown(rows: list[dict[str, Any]], *, title: str = "Activation Swe
     lines = [
         f"# {title}",
         "",
-        "| threshold | min_activation | max_orders | ttl_ms | min_replace_ms | orders | fills | fill_rate | adverse_5s | alpha_pnl | total_pnl | blocked |",
-        "|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| threshold | min_activation | max_orders | ttl_ms | min_replace_ms | orders | cancels | replaces | fills | fill_rate | fills/active_s | orders/min | cancels/min | adverse_5s | alpha_pnl | total_pnl | blocked |",
+        "|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
         lines.append(
-            "| {shock_threshold} | {min_activation_to_quote} | {max_active_orders} | {quote_ttl_ms} | {min_replace_interval_ms} | {virtual_orders} | {virtual_fills} | {fill_rate} | {average_adverse_5s} | {strategy_alpha_pnl} | {total_pnl} | {risk_blocked_quote_count} |".format(
+            "| {shock_threshold} | {min_activation_to_quote} | {max_active_orders} | {quote_ttl_ms} | {min_replace_interval_ms} | {virtual_orders} | {virtual_cancels} | {virtual_replaces} | {virtual_fills} | {fill_rate} | {fill_per_active_second} | {orders_per_minute} | {cancels_per_minute} | {average_adverse_5s} | {strategy_alpha_pnl} | {total_pnl} | {risk_blocked_quote_count} |".format(
                 **{
                     "max_active_orders": "",
                     "quote_ttl_ms": "",
                     "min_replace_interval_ms": "",
+                    "virtual_cancels": "",
+                    "virtual_replaces": "",
+                    "fill_per_active_second": "",
+                    "orders_per_minute": "",
+                    "cancels_per_minute": "",
                     **row,
                 }
             )

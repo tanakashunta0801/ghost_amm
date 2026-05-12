@@ -18,8 +18,15 @@ class MetricsSummary:
     unrealized_pnl: float
     fees_paid: float
     virtual_orders: int
+    virtual_cancels: int
+    virtual_replaces: int
     virtual_fills: int
     fill_rate: float
+    fill_per_placed_order: float
+    average_quote_lifetime_ms: float | None
+    orders_per_minute: float
+    cancels_per_minute: float
+    fill_per_active_second: float
     average_spread_captured: float | None
     average_adverse_1s: float | None
     average_adverse_5s: float | None
@@ -48,6 +55,8 @@ class MetricsSummary:
 
 def summarize(events: list[Event], *, initial_base: float, initial_quote: float, last_fair: float | None) -> MetricsSummary:
     virtual_orders = sum(1 for event in events if event.event_type == "virtual_order_placed")
+    virtual_cancels = sum(1 for event in events if event.event_type == "virtual_order_canceled")
+    virtual_replaces = sum(1 for event in events if event.event_type == "virtual_order_canceled" and event.payload.get("reason") == "replaced")
     fills = [event for event in events if event.event_type == "virtual_fill"]
     fees = sum(float(fill.payload.get("fee", 0)) for fill in fills)
     cash = initial_quote
@@ -126,6 +135,7 @@ def summarize(events: list[Event], *, initial_base: float, initial_quote: float,
     risk_blocked = sum(1 for event in events if event.event_type == "risk_state" and not event.payload.get("allow_quote"))
     skews = [event.payload.get("inventory_skew") for event in events if event.event_type == "virtual_order_placed"]
     skews_f = [abs(float(x)) for x in skews if x is not None]
+    churn = _quote_churn(events)
     return MetricsSummary(
         total_pnl=total_pnl,
         baseline_no_trade_pnl=baseline_no_trade_pnl,
@@ -137,8 +147,15 @@ def summarize(events: list[Event], *, initial_base: float, initial_quote: float,
         unrealized_pnl=unrealized,
         fees_paid=fees,
         virtual_orders=virtual_orders,
+        virtual_cancels=virtual_cancels,
+        virtual_replaces=virtual_replaces,
         virtual_fills=len(fills),
         fill_rate=(len(fills) / virtual_orders) if virtual_orders else 0.0,
+        fill_per_placed_order=(len(fills) / virtual_orders) if virtual_orders else 0.0,
+        average_quote_lifetime_ms=churn["average_quote_lifetime_ms"],
+        orders_per_minute=churn["orders_per_minute"],
+        cancels_per_minute=churn["cancels_per_minute"],
+        fill_per_active_second=churn["fill_per_active_second"],
         average_spread_captured=_avg(spread_capture),
         average_adverse_1s=_avg(adverse_1s),
         average_adverse_5s=_avg(adverse_5s),
@@ -189,3 +206,42 @@ def _max_drawdown(values: list[float]) -> float:
 def _min_nested(groups) -> float | None:
     values = [value for group in groups for value in group]
     return min(values) if values else None
+
+
+def _quote_churn(events: list[Event]) -> dict[str, float | None]:
+    if not events:
+        return {
+            "average_quote_lifetime_ms": None,
+            "orders_per_minute": 0.0,
+            "cancels_per_minute": 0.0,
+            "fill_per_active_second": 0.0,
+        }
+    first_ts = min(event.ts_exchange for event in events)
+    last_ts = max(event.ts_exchange for event in events)
+    duration_min = max((last_ts - first_ts) / 60_000, 1e-12)
+    placed: dict[str, float] = {}
+    closed_at: dict[str, float] = {}
+    fills = 0
+    cancels = 0
+    orders = 0
+    for event in events:
+        if event.event_type == "virtual_order_placed":
+            order_id = str(event.payload["order_id"])
+            placed[order_id] = float(event.payload.get("created_at", event.ts_exchange))
+            orders += 1
+        elif event.event_type == "virtual_order_canceled":
+            order_id = str(event.payload["order_id"])
+            closed_at.setdefault(order_id, event.ts_exchange)
+            cancels += 1
+        elif event.event_type == "virtual_fill":
+            order_id = str(event.payload["order_id"])
+            closed_at.setdefault(order_id, event.ts_exchange)
+            fills += 1
+    lifetimes = [max(0.0, closed_at.get(order_id, last_ts) - created_at) for order_id, created_at in placed.items()]
+    active_seconds = sum(lifetimes) / 1000
+    return {
+        "average_quote_lifetime_ms": _avg(lifetimes),
+        "orders_per_minute": orders / duration_min,
+        "cancels_per_minute": cancels / duration_min,
+        "fill_per_active_second": (fills / active_seconds) if active_seconds > 0 else 0.0,
+    }
