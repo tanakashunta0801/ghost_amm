@@ -119,3 +119,17 @@ def test_min_resting_time_blocks_early_fill() -> None:
 
     assert len(fills) == 1
     assert fills[0].payload["order_id"] == "o1"
+
+
+def test_maker_fee_is_applied_to_fill_payload() -> None:
+    book = OrderBook("bitbank", "BTC/JPY")
+    book.apply_snapshot({"bids": [], "asks": [["102", "1"]]}, 1, 0)
+    model = ConservativeQueueFillModel(queue_ahead_multiplier=0, maker_fee_bps=10, min_resting_time_ms=0)
+    model.on_virtual_order(_order("o1", "buy", 100, size=2), book)
+
+    fills = model.on_market_event(_trade("sell", 100, 2), _fair())
+
+    assert len(fills) == 1
+    assert fills[0].payload["fee"] == 0.2
+    assert fills[0].payload["fee_asset"] == "quote"
+    assert fills[0].payload["maker_fee_bps"] == 10

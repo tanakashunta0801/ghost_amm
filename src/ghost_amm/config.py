@@ -103,6 +103,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "cancel_latency_ms": 150,
         "min_resting_time_ms": 500,
     },
+    "fee": {
+        "maker_fee_source": "bitbank_pair_spec",
+        "negative_maker_fee_policy": "clamp_to_zero",
+    },
     "risk": {
         "max_drawdown_pct": 5,
         "max_daily_loss_pct": 3,

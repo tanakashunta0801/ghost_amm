@@ -165,6 +165,15 @@ class GhostAmmPipeline:
     def _ingest_metadata(self, event: Event) -> None:
         if event.event_type == "bitbank_pair_spec":
             self.pair_spec = BitbankPairSpec.from_api(event.payload)
+            if self.config.get("fee.maker_fee_source", "bitbank_pair_spec") == "bitbank_pair_spec":
+                self.fill_model.set_maker_fee_bps(_maker_fee_bps_from_pair_spec(self.pair_spec, self.config.section("fee")))
         elif event.event_type == "bitbank_status":
             if "status" in event.payload and "min_amount" in event.payload:
                 self.status = BitbankStatus.from_api(event.payload)
+
+
+def _maker_fee_bps_from_pair_spec(pair_spec: BitbankPairSpec, fee_cfg: dict) -> float:
+    maker_fee_bps = pair_spec.maker_fee_bps_quote
+    if maker_fee_bps < 0 and fee_cfg.get("negative_maker_fee_policy", "clamp_to_zero") == "clamp_to_zero":
+        return 0.0
+    return maker_fee_bps

@@ -30,6 +30,8 @@ def _write_fills_csv(path: Path, events: list[Event]) -> None:
         "fill_size",
         "fill_ts",
         "fee",
+        "fee_asset",
+        "maker_fee_bps",
         "queue_ahead_estimate",
         "fair_at_fill",
         "fair_after_1s",

@@ -35,6 +35,9 @@ class ConservativeQueueFillModel:
             min_resting_time_ms=float(cfg.get("min_resting_time_ms", 500)),
         )
 
+    def set_maker_fee_bps(self, maker_fee_bps: float) -> None:
+        self.maker_fee_bps = maker_fee_bps
+
     def on_virtual_order(self, event: Event, book: OrderBook) -> None:
         payload = event.payload
         side = str(payload["side"])
@@ -116,6 +119,8 @@ class ConservativeQueueFillModel:
                 "fill_size": fill_size,
                 "fill_ts": event.ts_exchange,
                 "fee": fee,
+                "fee_asset": "quote",
+                "maker_fee_bps": self.maker_fee_bps,
                 "queue_ahead_estimate": order.queue_ahead,
                 "fair_at_fill": fair_state.fair,
                 "fair_after_1s": None,
