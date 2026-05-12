@@ -87,6 +87,7 @@ class GhostAmmPipeline:
                 amount=float(fill.payload["fill_size"]),
                 fee=float(fill.payload["fee"]),
             )
+            self.risk.record_fill(side=str(fill.payload["side"]), ts_ms=float(fill.payload["fill_ts"]))
             self.projector.remove_filled(str(fill.payload["order_id"]))
             emitted.append(fill)
 

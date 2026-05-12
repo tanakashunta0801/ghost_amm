@@ -117,6 +117,9 @@ risk:
   max_drawdown_pct: 5
   max_daily_loss_pct: 3
   max_virtual_fills_per_minute: 20
+  max_same_side_fills_per_window: 3
+  fill_burst_window_ms: 10000
+  fill_burst_cooldown_ms: 60000
   block_on_sequence_ordering_violation: true
   block_on_bitbank_status_not_normal: true
   block_on_pair_stop_flags: true

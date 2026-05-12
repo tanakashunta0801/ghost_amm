@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections import deque
+from dataclasses import dataclass, field
 
 from ghost_amm.amm.inventory import InventoryState
 from ghost_amm.exchange.bitbank_rules import BitbankPairSpec, BitbankStatus
@@ -16,6 +17,8 @@ class RiskDecision:
     allow_sell: bool
     max_order_size: float
     reason: str | None = None
+    blocked_sides: list[str] = field(default_factory=list)
+    cooldown_until_ms: float | None = None
 
 
 class RiskKernel:
@@ -24,6 +27,23 @@ class RiskKernel:
         self.risk_cfg = risk_cfg
         self.shock_cfg = shock_cfg
         self.amm_cfg = amm_cfg
+        self.fill_history: deque[tuple[float, str]] = deque()
+        self.fill_burst_cooldown_until: dict[str, float] = {}
+
+    def record_fill(self, *, side: str, ts_ms: float) -> None:
+        max_fills = int(self.risk_cfg.get("max_same_side_fills_per_window", 0))
+        if max_fills <= 0:
+            return
+        side = str(side)
+        if side not in {"buy", "sell"}:
+            return
+        window_ms = float(self.risk_cfg.get("fill_burst_window_ms", 10_000))
+        cooldown_ms = float(self.risk_cfg.get("fill_burst_cooldown_ms", 60_000))
+        self.fill_history.append((ts_ms, side))
+        self._expire_fill_history(ts_ms, window_ms)
+        same_side_count = sum(1 for _, fill_side in self.fill_history if fill_side == side)
+        if same_side_count >= max_fills:
+            self.fill_burst_cooldown_until[side] = ts_ms + cooldown_ms
 
     def evaluate(
         self,
@@ -66,4 +86,27 @@ class RiskKernel:
             return RiskDecision(False, False, False, 0.0, book.stale_reason or "book_stale")
         allow_buy = not (pair_spec and pair_spec.stop_buy_order)
         allow_sell = not (pair_spec and pair_spec.stop_sell_order)
-        return RiskDecision(allow_buy or allow_sell, allow_buy, allow_sell, max_size, None)
+        fill_burst_blocked = self._fill_burst_blocked_sides(now_ms)
+        if "buy" in fill_burst_blocked:
+            allow_buy = False
+        if "sell" in fill_burst_blocked:
+            allow_sell = False
+        reason = "fill_burst_cooldown" if fill_burst_blocked else None
+        cooldown_until = max((self.fill_burst_cooldown_until[side] for side in fill_burst_blocked), default=None)
+        return RiskDecision(allow_buy or allow_sell, allow_buy, allow_sell, max_size, reason, fill_burst_blocked, cooldown_until)
+
+    def _expire_fill_history(self, now_ms: float, window_ms: float) -> None:
+        while self.fill_history and now_ms - self.fill_history[0][0] > window_ms:
+            self.fill_history.popleft()
+
+    def _fill_burst_blocked_sides(self, now_ms: float) -> list[str]:
+        blocked: list[str] = []
+        for side in ["buy", "sell"]:
+            cooldown_until = self.fill_burst_cooldown_until.get(side)
+            if cooldown_until is None:
+                continue
+            if now_ms < cooldown_until:
+                blocked.append(side)
+            else:
+                self.fill_burst_cooldown_until.pop(side, None)
+        return blocked
