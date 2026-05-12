@@ -8,6 +8,11 @@ from ghost_amm.events import Event
 @dataclass(frozen=True)
 class MetricsSummary:
     total_pnl: float
+    baseline_no_trade_pnl: float
+    strategy_alpha_pnl: float
+    start_equity: float
+    end_equity: float
+    baseline_end_equity: float
     realized_pnl: float
     unrealized_pnl: float
     fees_paid: float
@@ -68,8 +73,12 @@ def summarize(events: list[Event], *, initial_base: float, initial_quote: float,
 
     start_fair = _first_fair(events) or last_fair or 0.0
     start_equity = initial_base * start_fair + initial_quote
-    end_equity = base * (last_fair or start_fair) + cash
+    end_fair = last_fair or start_fair
+    end_equity = base * end_fair + cash
+    baseline_end_equity = initial_base * end_fair + initial_quote
+    baseline_no_trade_pnl = baseline_end_equity - start_equity
     total_pnl = end_equity - start_equity
+    strategy_alpha_pnl = end_equity - baseline_end_equity
     unrealized = total_pnl - realized
     drawdown = _max_drawdown(fill_values)
     risk_blocked = sum(1 for event in events if event.event_type == "risk_state" and not event.payload.get("allow_quote"))
@@ -77,6 +86,11 @@ def summarize(events: list[Event], *, initial_base: float, initial_quote: float,
     skews_f = [abs(float(x)) for x in skews if x is not None]
     return MetricsSummary(
         total_pnl=total_pnl,
+        baseline_no_trade_pnl=baseline_no_trade_pnl,
+        strategy_alpha_pnl=strategy_alpha_pnl,
+        start_equity=start_equity,
+        end_equity=end_equity,
+        baseline_end_equity=baseline_end_equity,
         realized_pnl=realized,
         unrealized_pnl=unrealized,
         fees_paid=fees,

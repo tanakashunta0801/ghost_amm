@@ -109,8 +109,9 @@ def _rank_key(row: dict[str, Any]) -> tuple[int, float, float, float]:
     orders = int(row["virtual_orders"])
     adverse = row.get("average_adverse_5s")
     adverse_value = float(adverse) if adverse is not None else -1e18
-    # Prefer configs with any fills, better 5s adverse selection, and fewer orders.
-    return (0 if fills else 1, -adverse_value, orders, -float(row.get("total_pnl") or 0.0))
+    alpha = float(row.get("strategy_alpha_pnl") or 0.0)
+    # Prefer configs with any fills, better 5s adverse selection, fewer orders, and better alpha.
+    return (0 if fills else 1, -adverse_value, orders, -alpha)
 
 
 def _write_outputs(out: Path, rows: list[dict[str, Any]], *, stem: str = "activation_sweep") -> None:
@@ -131,12 +132,12 @@ def _render_markdown(rows: list[dict[str, Any]], *, title: str = "Activation Swe
     lines = [
         f"# {title}",
         "",
-        "| threshold | min_activation | max_orders | ttl_ms | min_replace_ms | orders | fills | fill_rate | adverse_5s | pnl | blocked |",
-        "|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| threshold | min_activation | max_orders | ttl_ms | min_replace_ms | orders | fills | fill_rate | adverse_5s | alpha_pnl | total_pnl | blocked |",
+        "|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
         lines.append(
-            "| {shock_threshold} | {min_activation_to_quote} | {max_active_orders} | {quote_ttl_ms} | {min_replace_interval_ms} | {virtual_orders} | {virtual_fills} | {fill_rate} | {average_adverse_5s} | {total_pnl} | {risk_blocked_quote_count} |".format(
+            "| {shock_threshold} | {min_activation_to_quote} | {max_active_orders} | {quote_ttl_ms} | {min_replace_interval_ms} | {virtual_orders} | {virtual_fills} | {fill_rate} | {average_adverse_5s} | {strategy_alpha_pnl} | {total_pnl} | {risk_blocked_quote_count} |".format(
                 **{
                     "max_active_orders": "",
                     "quote_ttl_ms": "",
