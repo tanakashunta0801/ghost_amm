@@ -8,7 +8,7 @@ from dataclasses import asdict
 from ghost_amm.analytics.metrics import summarize
 from ghost_amm.analytics.report import write_report
 from ghost_amm.analytics.risk_diagnostics import analyze_risk_blocks, write_risk_diagnostics
-from ghost_amm.analytics.sweep import run_activation_sweep
+from ghost_amm.analytics.sweep import run_activation_sweep, run_churn_sweep
 from ghost_amm.config import Config, load_config
 from ghost_amm.dryrun.public_stream_engine import PublicStreamDryRunEngine
 from ghost_amm.events import read_jsonl, write_jsonl
@@ -84,6 +84,18 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--config", default="configs/default.yaml")
     p.add_argument("--thresholds", default="0.003,0.01,0.03,0.05")
     p.add_argument("--min-activations", default="0.001,0.01,0.03")
+    p.add_argument("--out", required=True)
+
+    p = sub.add_parser("sweep-churn")
+    p.add_argument("--events", required=True, nargs="+")
+    p.add_argument("--config", default="configs/default.yaml")
+    p.add_argument("--threshold", type=float, default=0.05)
+    p.add_argument("--min-activation", type=float, default=0.03)
+    p.add_argument("--max-active-orders", default="2,4,6")
+    p.add_argument("--quote-ttls-ms", default="30000,60000")
+    p.add_argument("--min-replace-intervals-ms", default="10000,30000")
+    p.add_argument("--replace-threshold-bps", type=float, default=2)
+    p.add_argument("--size-replace-threshold-ratio", type=float, default=0.5)
     p.add_argument("--out", required=True)
 
     args = parser.parse_args(argv)
@@ -200,6 +212,25 @@ def main(argv: list[str] | None = None) -> int:
             events=events,
             thresholds=_parse_float_list(args.thresholds),
             min_activations=_parse_float_list(args.min_activations),
+            out_dir=args.out,
+        )
+        print(json.dumps({"rows": len(rows), "out": args.out, "best": rows[0] if rows else None}, sort_keys=True))
+        return 0
+
+    if args.command == "sweep-churn":
+        events = []
+        for path in args.events:
+            events.extend(read_jsonl(path))
+        rows = run_churn_sweep(
+            base_config=load_config(args.config),
+            events=events,
+            shock_threshold=args.threshold,
+            min_activation=args.min_activation,
+            max_active_orders=[int(value) for value in _parse_float_list(args.max_active_orders)],
+            quote_ttls_ms=_parse_float_list(args.quote_ttls_ms),
+            min_replace_intervals_ms=_parse_float_list(args.min_replace_intervals_ms),
+            replace_threshold_bps=args.replace_threshold_bps,
+            size_replace_threshold_ratio=args.size_replace_threshold_ratio,
             out_dir=args.out,
         )
         print(json.dumps({"rows": len(rows), "out": args.out, "best": rows[0] if rows else None}, sort_keys=True))
