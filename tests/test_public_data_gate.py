@@ -24,6 +24,8 @@ def test_run_public_data_gate_writes_inspection_replays_and_quality_gate(tmp_pat
             "--configs",
             str(config),
             str(config),
+            "--diagnostic-configs",
+            str(config),
             "--out",
             str(out),
         ]
@@ -37,9 +39,13 @@ def test_run_public_data_gate_writes_inspection_replays_and_quality_gate(tmp_pat
     assert payload["quality_gate_report"] == str(out / "quality_gate.md")
     assert payload["prevent_sleep"]["enabled"] is False
     assert len(payload["replays"]) == 2
+    assert len(payload["diagnostic_replays"]) == 1
     assert (out / "01_default" / "summary.json").exists()
     assert (out / "02_default" / "summary.json").exists()
-    assert json.loads((out / "quality_gate.json").read_text(encoding="utf-8"))["ok"] is False
+    assert (out / "diagnostic_01_default" / "summary.json").exists()
+    quality = json.loads((out / "quality_gate.json").read_text(encoding="utf-8"))
+    assert quality["ok"] is False
+    assert len(quality["reports"]) == 2
     assert "Status: FAIL" in (out / "quality_gate.md").read_text(encoding="utf-8")
     assert any(failure.startswith("recording_duration_below_min:") for failure in payload["quality_failures"])
 

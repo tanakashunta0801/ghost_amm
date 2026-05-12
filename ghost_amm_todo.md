@@ -50,6 +50,7 @@ uv run --extra test pytest -q
 - Public data gate runner supports `--prevent-sleep`, so Windows can stay awake during long post-recording replay and quality checks.
 - Public data gate runner supports `--require-min-duration-before-replay`, so early recorder exits stop before expensive multi-config replay.
 - Quality gate writes `quality_gate.md` alongside JSON so pass/fail, alpha, fills, and churn are reviewable without parsing JSON.
+- Public data gate runner supports `--diagnostic-configs`, so high-churn diagnostic replays are generated without counting against the quality gate.
 
 ## In Progress
 
@@ -192,6 +193,7 @@ One-shot 24h public data gate:
 uv run ghost-amm run-public-data-gate `
   --events data/raw/bitbank_btc_jpy_24h_20260512_234537*.jsonl `
   --configs configs/default.yaml configs/diagnostic_controlled_churn.yaml `
+  --diagnostic-configs configs/diagnostic_relaxed_activation.yaml `
   --out data/reports/bitbank_btc_jpy_24h_gate `
   --require-min-duration-before-replay `
   --prevent-sleep

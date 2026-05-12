@@ -122,6 +122,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("run-public-data-gate")
     p.add_argument("--events", required=True, nargs="+")
     p.add_argument("--configs", required=True, nargs="+")
+    p.add_argument("--diagnostic-configs", nargs="*", default=[])
     p.add_argument("--out", required=True)
     p.add_argument("--strict", action=argparse.BooleanOptionalAction, default=True)
     p.add_argument("--replay-order", choices=["arrival_order", "exchange_time_sort"], default="arrival_order")
@@ -534,7 +535,55 @@ def _run_public_data_gate(args: argparse.Namespace, *, prevent_sleep: dict) -> t
         summary_paths.append(summary_path)
         replay_results.append(
             {
+                    "config": str(cfg_path),
+                    "role": "quality_gate",
+                    "out": str(run_out),
+                    "summary": str(summary_path),
+                "events": len(output),
+                "virtual_orders": sum(1 for event in output if event.event_type == "virtual_order_placed"),
+                "virtual_fills": sum(1 for event in output if event.event_type == "virtual_fill"),
+                "replay_order": engine.last_replay_order,
+                "strict_sequence": engine.last_strict_sequence,
+            }
+        )
+    diagnostic_replays = []
+    for index, config_path in enumerate(args.diagnostic_configs, start=1):
+        cfg_path = Path(config_path)
+        if not cfg_path.exists():
+            payload = {
+                "ok": False,
+                "stage": "diagnostic_config",
+                "reason": "config_not_found",
+                "path": str(cfg_path),
+                "prevent_sleep": prevent_sleep,
+            }
+            _write_json(out / "public_data_gate.json", payload)
+            return 1, payload
+        run_out = out / f"diagnostic_{index:02d}_{cfg_path.stem}"
+        engine = ReplayEngine(load_config(cfg_path))
+        try:
+            output = engine.run_files(
+                args.events,
+                run_out,
+                replay_order=args.replay_order,
+                strict_sequence=args.strict_sequence,
+            )
+        except ValueError as exc:
+            payload = {
+                "ok": False,
+                "stage": "diagnostic_replay",
+                "reason": str(exc),
                 "config": str(cfg_path),
+                "out": str(run_out),
+                "prevent_sleep": prevent_sleep,
+            }
+            _write_json(out / "public_data_gate.json", payload)
+            return 1, payload
+        summary_path = run_out / "summary.json"
+        diagnostic_replays.append(
+            {
+                "config": str(cfg_path),
+                "role": "diagnostic",
                 "out": str(run_out),
                 "summary": str(summary_path),
                 "events": len(output),
@@ -559,6 +608,7 @@ def _run_public_data_gate(args: argparse.Namespace, *, prevent_sleep: dict) -> t
         "quality_gate": str(quality_path),
         "quality_gate_report": str(quality_report_path),
         "replays": replay_results,
+        "diagnostic_replays": diagnostic_replays,
         "quality_failures": quality.failures,
         "prevent_sleep": prevent_sleep,
         "out": str(out),
