@@ -1,6 +1,6 @@
 import json
 
-from ghost_amm.analytics.quality_gate import QualityGateThresholds, evaluate_quality_gate
+from ghost_amm.analytics.quality_gate import QualityGateThresholds, evaluate_quality_gate, render_quality_gate_markdown
 from ghost_amm.cli import main
 
 
@@ -53,7 +53,22 @@ def test_evaluate_quality_gate_cli_writes_result_and_returns_failure(tmp_path, c
     assert code == 1
     assert payload["ok"] is False
     assert out.exists()
+    assert (tmp_path / "quality_gate.md").exists()
     assert json.loads(out.read_text(encoding="utf-8"))["ok"] is False
+    assert "Status: FAIL" in (tmp_path / "quality_gate.md").read_text(encoding="utf-8")
+
+
+def test_quality_gate_markdown_summarizes_reports_and_failures(tmp_path) -> None:
+    inspection = _write_json(tmp_path / "recording_inspection.json", {"ok_for_replay": True, "duration_hours": 12.0, "events": 10, "sequence_violations": 0})
+    summary = _write_summary(tmp_path / "summary.json", strategy_alpha_pnl=-4.0, virtual_fills=1, fill_rate=0.0001)
+    result = evaluate_quality_gate(summary_paths=[summary], recording_inspection_path=inspection)
+
+    markdown = render_quality_gate_markdown(result)
+
+    assert "# Ghost AMM Quality Gate" in markdown
+    assert "Status: FAIL" in markdown
+    assert str(summary) in markdown
+    assert "strategy_alpha_not_positive" in markdown
 
 
 def _write_summary(

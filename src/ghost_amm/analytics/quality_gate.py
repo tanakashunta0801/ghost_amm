@@ -83,6 +83,61 @@ def write_quality_gate_result(path: str | Path, result: QualityGateResult) -> No
         json.dump(result.to_dict(), fh, ensure_ascii=False, indent=2, sort_keys=True)
 
 
+def write_quality_gate_markdown(path: str | Path, result: QualityGateResult) -> None:
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(render_quality_gate_markdown(result), encoding="utf-8")
+
+
+def render_quality_gate_markdown(result: QualityGateResult) -> str:
+    inspection = result.recording_inspection or {}
+    lines = [
+        "# Ghost AMM Quality Gate",
+        "",
+        f"Status: {'PASS' if result.ok else 'FAIL'}",
+        "",
+        "## Recording",
+        "",
+        "| Metric | Value |",
+        "|---|---:|",
+        f"| ok_for_replay | {inspection.get('ok_for_replay')} |",
+        f"| duration_hours | {inspection.get('duration_hours')} |",
+        f"| events | {inspection.get('events')} |",
+        f"| sequence_violations | {inspection.get('sequence_violations')} |",
+        "",
+        "## Reports",
+        "",
+        "| Report | Alpha PnL | Fills | Fill Rate | Orders/min | Cancels/min |",
+        "|---|---:|---:|---:|---:|---:|",
+    ]
+    for report in result.reports:
+        lines.append(
+            "| {path} | {alpha} | {fills} | {fill_rate} | {orders_per_minute} | {cancels_per_minute} |".format(
+                path=report["path"],
+                alpha=report["strategy_alpha_pnl"],
+                fills=report["virtual_fills"],
+                fill_rate=report["fill_rate"],
+                orders_per_minute=report["orders_per_minute"],
+                cancels_per_minute=report["cancels_per_minute"],
+            )
+        )
+    lines.extend(["", "## Thresholds", "", "| Metric | Value |", "|---|---:|"])
+    for key, value in result.thresholds.items():
+        lines.append(f"| {key} | {value} |")
+    lines.extend(["", "## Failures", ""])
+    if result.failures:
+        lines.extend(f"- `{failure}`" for failure in result.failures)
+    else:
+        lines.append("- None")
+    lines.extend(
+        [
+            "",
+            "This gate is based on virtual replay reports only. It is not evidence of live execution profitability.",
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
 def _summary_report(path: Path) -> dict[str, Any]:
     data = _read_json(path)
     return {

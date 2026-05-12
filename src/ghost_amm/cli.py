@@ -9,7 +9,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from ghost_amm.analytics.metrics import summarize
-from ghost_amm.analytics.quality_gate import QualityGateThresholds, evaluate_quality_gate, write_quality_gate_result
+from ghost_amm.analytics.quality_gate import QualityGateThresholds, evaluate_quality_gate, write_quality_gate_markdown, write_quality_gate_result
 from ghost_amm.analytics.report import write_report
 from ghost_amm.analytics.risk_diagnostics import analyze_risk_blocks, write_risk_diagnostics
 from ghost_amm.analytics.sweep import run_activation_sweep, run_churn_sweep
@@ -378,7 +378,9 @@ def main(argv: list[str] | None = None) -> int:
             thresholds=_quality_gate_thresholds(args),
         )
         if args.out:
-            write_quality_gate_result(args.out, result)
+            out = Path(args.out)
+            write_quality_gate_result(out, result)
+            write_quality_gate_markdown(out.with_suffix(".md"), result)
         print(json.dumps(result.to_dict(), ensure_ascii=False, sort_keys=True))
         return 0 if result.ok else 1
 
@@ -548,11 +550,14 @@ def _run_public_data_gate(args: argparse.Namespace, *, prevent_sleep: dict) -> t
         thresholds=_quality_gate_thresholds(args),
     )
     quality_path = out / "quality_gate.json"
+    quality_report_path = out / "quality_gate.md"
     write_quality_gate_result(quality_path, quality)
+    write_quality_gate_markdown(quality_report_path, quality)
     payload = {
         "ok": quality.ok,
         "recording_inspection": str(inspection_path),
         "quality_gate": str(quality_path),
+        "quality_gate_report": str(quality_report_path),
         "replays": replay_results,
         "quality_failures": quality.failures,
         "prevent_sleep": prevent_sleep,

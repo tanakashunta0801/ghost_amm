@@ -34,11 +34,13 @@ def test_run_public_data_gate_writes_inspection_replays_and_quality_gate(tmp_pat
     assert payload["ok"] is False
     assert payload["recording_inspection"] == str(out / "recording_inspection.json")
     assert payload["quality_gate"] == str(out / "quality_gate.json")
+    assert payload["quality_gate_report"] == str(out / "quality_gate.md")
     assert payload["prevent_sleep"]["enabled"] is False
     assert len(payload["replays"]) == 2
     assert (out / "01_default" / "summary.json").exists()
     assert (out / "02_default" / "summary.json").exists()
     assert json.loads((out / "quality_gate.json").read_text(encoding="utf-8"))["ok"] is False
+    assert "Status: FAIL" in (out / "quality_gate.md").read_text(encoding="utf-8")
     assert any(failure.startswith("recording_duration_below_min:") for failure in payload["quality_failures"])
 
 

@@ -103,7 +103,7 @@ uv run ghost-amm run-public-data-gate `
   --prevent-sleep
 ```
 
-The command writes `recording_inspection.json`, one replay report directory per config, `quality_gate.json`, and `public_data_gate.json`. It exits non-zero unless strict recording inspection and the configured quality thresholds pass.
+The command writes `recording_inspection.json`, one replay report directory per config, `quality_gate.json`, `quality_gate.md`, and `public_data_gate.json`. It exits non-zero unless strict recording inspection and the configured quality thresholds pass.
 The CLI expands `--events` wildcards itself, so the `*.jsonl` form works in PowerShell. `--require-min-duration-before-replay` stops before replay if the recording is shorter than the quality-gate minimum. On Windows, `--prevent-sleep` keeps the system awake during the post-recording replay and quality-gate pass.
 
 ## External Fair Price Events

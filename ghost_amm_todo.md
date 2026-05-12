@@ -49,6 +49,7 @@ uv run --extra test pytest -q
 - Recording monitor supports `--min-duration-hours`, so 24h gate checks fail explicitly on partial recordings.
 - Public data gate runner supports `--prevent-sleep`, so Windows can stay awake during long post-recording replay and quality checks.
 - Public data gate runner supports `--require-min-duration-before-replay`, so early recorder exits stop before expensive multi-config replay.
+- Quality gate writes `quality_gate.md` alongside JSON so pass/fail, alpha, fills, and churn are reviewable without parsing JSON.
 
 ## In Progress
 
