@@ -133,6 +133,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--min-strategy-alpha-pnl", type=float, default=0.0)
     p.add_argument("--max-orders-per-minute", type=float, default=10.0)
     p.add_argument("--max-cancels-per-minute", type=float, default=10.0)
+    p.add_argument("--require-min-duration-before-replay", action=argparse.BooleanOptionalAction, default=False)
     p.add_argument("--prevent-sleep", action="store_true")
 
     p = sub.add_parser("analyze-risk-blocks")
@@ -478,6 +479,16 @@ def _run_public_data_gate(args: argparse.Namespace, *, prevent_sleep: dict) -> t
             "ok": False,
             "stage": "inspect_recording",
             "reason": inspection.reason,
+            "recording_inspection": str(inspection_path),
+            "prevent_sleep": prevent_sleep,
+        }
+        _write_json(out / "public_data_gate.json", payload)
+        return 1, payload
+    if args.require_min_duration_before_replay and inspection.duration_hours < args.min_recording_hours:
+        payload = {
+            "ok": False,
+            "stage": "recording_duration",
+            "reason": f"recording_duration_below_min:{inspection.duration_hours}<{args.min_recording_hours}",
             "recording_inspection": str(inspection_path),
             "prevent_sleep": prevent_sleep,
         }

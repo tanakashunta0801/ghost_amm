@@ -70,6 +70,34 @@ def test_run_public_data_gate_stops_before_replay_when_inspection_fails(tmp_path
     assert not (out / "01_default" / "summary.json").exists()
 
 
+def test_run_public_data_gate_can_stop_before_replay_when_recording_is_short(tmp_path, capsys) -> None:
+    recording = tmp_path / "recording.jsonl"
+    out = tmp_path / "gate"
+    write_jsonl(recording, _valid_recording_events())
+
+    code = main(
+        [
+            "run-public-data-gate",
+            "--events",
+            str(recording),
+            "--configs",
+            "configs/default.yaml",
+            "--out",
+            str(out),
+            "--require-min-duration-before-replay",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 1
+    assert payload["ok"] is False
+    assert payload["stage"] == "recording_duration"
+    assert payload["reason"].startswith("recording_duration_below_min:")
+    assert (out / "recording_inspection.json").exists()
+    assert not (out / "quality_gate.json").exists()
+    assert not (out / "01_default" / "summary.json").exists()
+
+
 def _valid_recording_events(*, include_ticker: bool = True, include_trade: bool = True):
     events = [
         pair_spec_event(fallback_btc_jpy_spec(), ts_ms=1000),

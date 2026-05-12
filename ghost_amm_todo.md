@@ -48,6 +48,7 @@ uv run --extra test pytest -q
 - CLI event inputs expand wildcards internally, so rotated JSONL sets like `data/raw/bitbank_btc_jpy_24h_*.jsonl` work in PowerShell.
 - Recording monitor supports `--min-duration-hours`, so 24h gate checks fail explicitly on partial recordings.
 - Public data gate runner supports `--prevent-sleep`, so Windows can stay awake during long post-recording replay and quality checks.
+- Public data gate runner supports `--require-min-duration-before-replay`, so early recorder exits stop before expensive multi-config replay.
 
 ## In Progress
 
@@ -191,6 +192,7 @@ uv run ghost-amm run-public-data-gate `
   --events data/raw/bitbank_btc_jpy_24h_20260512_234537*.jsonl `
   --configs configs/default.yaml configs/diagnostic_controlled_churn.yaml `
   --out data/reports/bitbank_btc_jpy_24h_gate `
+  --require-min-duration-before-replay `
   --prevent-sleep
 ```
 
