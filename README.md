@@ -2,6 +2,8 @@
 
 Research-first prototype for a bitbank spot BTC/JPY virtual AMM. The MVP records or generates events, replays them deterministically, projects virtual post-only quotes, simulates conservative fills, and writes analytics. It does not submit live orders.
 
+Current implementation status and remaining gates are tracked in [ghost_amm_todo.md](ghost_amm_todo.md).
+
 ## Quick Start
 
 ```powershell
@@ -55,6 +57,20 @@ For strict channel coverage, including observed ticker and trade events:
 ```powershell
 uv run ghost-amm inspect-recording data/raw/bitbank_btc_jpy_1h.jsonl --strict
 ```
+
+## External Fair Price Events
+
+Replay can consume `external_fair_price` events as an additional robust-fair source. A CCXT public ticker snapshot can be converted to one JSONL event by combining BTC/USD and USD/JPY:
+
+```powershell
+uv run --extra full ghost-amm ccxt-fair-snapshot `
+  --exchange <public-exchange-id> `
+  --btc-usd-symbol BTC/USD `
+  --usd-jpy-symbol USD/JPY `
+  --out data/raw/external_fair_snapshot.jsonl
+```
+
+These events are filtered by the same freshness, source-count, and deviation rules as bitbank book/ticker fair sources.
 
 ## Safety Boundary
 

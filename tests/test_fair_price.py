@@ -103,6 +103,76 @@ def test_ticker_mid_can_join_book_source() -> None:
     assert state.sources == ["bitbank_ticker_mid", "bitbank_orderbook_mid"]
 
 
+def test_external_btc_usd_jpy_source_can_join_book_source() -> None:
+    book = OrderBook("bitbank", "BTC/JPY")
+    book.apply_snapshot({"bids": [["7499000", "1"]], "asks": [["7501000", "1"]]}, 1, 1000)
+    engine = FairPriceEngine(max_spread_bps=500, stale_after_ms=3000, min_source_count=2)
+    external = make_event(
+        "external_fair_price",
+        ts_exchange=1000,
+        venue="ccxt:external",
+        symbol="BTC/JPY",
+        sequence=2,
+        payload={"btc_usd": 50000, "usd_jpy": 150, "source": "external_btc_usd_jpy", "spread_bps": 5},
+    )
+
+    state = engine.from_market_event(book, external, 1000)
+
+    assert state.is_valid
+    assert state.fair == 7500000
+    assert state.source_count == 2
+    assert state.sources == ["external_btc_usd_jpy", "bitbank_orderbook_mid"]
+
+
+def test_deviated_external_source_is_ignored() -> None:
+    book = OrderBook("bitbank", "BTC/JPY")
+    book.apply_snapshot({"bids": [["7499000", "1"]], "asks": [["7501000", "1"]]}, 1, 1000)
+    engine = FairPriceEngine(max_spread_bps=500, stale_after_ms=3000, min_source_count=2, max_source_deviation_bps=100)
+    ticker = make_event(
+        "bitbank_ticker",
+        ts_exchange=1000,
+        venue="bitbank",
+        symbol="BTC/JPY",
+        sequence=2,
+        payload={"buy": 7499500, "sell": 7500500, "last": 7500000},
+    )
+    external = make_event(
+        "external_fair_price",
+        ts_exchange=1000,
+        venue="ccxt:external",
+        symbol="BTC/JPY",
+        sequence=3,
+        payload={"fair_jpy": 8000000, "source": "external_btc_usd_jpy"},
+    )
+
+    engine.from_market_event(book, ticker, 1000)
+    state = engine.from_market_event(book, external, 1000)
+
+    assert state.is_valid
+    assert state.sources == ["bitbank_ticker_mid", "bitbank_orderbook_mid"]
+    assert "external_btc_usd_jpy" not in state.sources
+
+
+def test_malformed_external_source_is_ignored() -> None:
+    book = OrderBook("bitbank", "BTC/JPY")
+    book.apply_snapshot({"bids": [["7499000", "1"]], "asks": [["7501000", "1"]]}, 1, 1000)
+    engine = FairPriceEngine(max_spread_bps=500, stale_after_ms=3000, min_source_count=2)
+    external = make_event(
+        "external_fair_price",
+        ts_exchange=1000,
+        venue="ccxt:external",
+        symbol="BTC/JPY",
+        sequence=2,
+        payload={"fair_jpy": "bad", "source": "external_btc_usd_jpy"},
+    )
+
+    state = engine.from_market_event(book, external, 1000)
+
+    assert not state.is_valid
+    assert state.reason == "insufficient_fair_sources"
+    assert state.sources == ["bitbank_orderbook_mid"]
+
+
 def test_min_source_count_blocks_pipeline_risk_state() -> None:
     event = make_event(
         "order_book_snapshot",
@@ -119,3 +189,32 @@ def test_min_source_count_blocks_pipeline_risk_state() -> None:
     assert risk_state.payload["reason"] == "insufficient_fair_sources"
     assert risk_state.payload["fair_sources"] == ["bitbank_orderbook_mid"]
     assert risk_state.payload["fair_source_count"] == 1
+
+
+def test_external_fair_event_keeps_internal_events_on_execution_venue() -> None:
+    events = [
+        make_event(
+            "order_book_snapshot",
+            ts_exchange=1000,
+            venue="bitbank",
+            symbol="BTC/JPY",
+            sequence=1,
+            payload={"bids": [["7499000", "1"]], "asks": [["7501000", "1"]]},
+        ),
+        make_event(
+            "external_fair_price",
+            ts_exchange=1001,
+            venue="ccxt:external",
+            symbol="BTC/JPY",
+            sequence=2,
+            payload={"fair_jpy": 7500000, "source": "external_btc_usd_jpy"},
+        ),
+    ]
+
+    output = ReplayEngine(Config({"fair": {"min_source_count": 2}, "market": {"max_spread_bps": 500}})).run(events)
+    mark_prices = [item for item in output if item.event_type == "mark_price"]
+    risk_states = [item for item in output if item.event_type == "risk_state"]
+
+    assert mark_prices[-1].venue == "bitbank"
+    assert risk_states[-1].venue == "bitbank"
+    assert set(risk_states[-1].payload["fair_sources"]) == {"external_btc_usd_jpy", "bitbank_orderbook_mid"}

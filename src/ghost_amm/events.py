@@ -64,6 +64,10 @@ class BitbankPairSpecEvent(Event):
     pass
 
 
+class ExternalFairPriceEvent(Event):
+    pass
+
+
 class BitbankRawEvent(Event):
     pass
 
@@ -112,6 +116,7 @@ EVENT_TYPES: dict[str, type[Event]] = {
     "bitbank_ticker": BitbankTickerEvent,
     "bitbank_status": BitbankStatusEvent,
     "bitbank_pair_spec": BitbankPairSpecEvent,
+    "external_fair_price": ExternalFairPriceEvent,
     "bitbank_raw": BitbankRawEvent,
     "mark_price": MarkPriceEvent,
     "virtual_order_placed": VirtualOrderPlaced,

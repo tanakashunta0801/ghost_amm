@@ -62,6 +62,10 @@ class FairPriceEngine:
             ticker_source = _source_from_ticker(event)
             if ticker_source is not None:
                 self.sources[ticker_source.name] = ticker_source
+        elif event.event_type == "external_fair_price":
+            external_source = _source_from_external_fair(event)
+            if external_source is not None:
+                self.sources[external_source.name] = external_source
         book_source = self._source_from_orderbook(book, now_ms)
         if book_source is not None:
             self.sources[book_source.name] = book_source
@@ -168,6 +172,44 @@ def _source_from_ticker(event: Event) -> FairPriceSource | None:
     if last is not None and float(last) > 0:
         return FairPriceSource("bitbank_ticker_last", float(last), event.ts_exchange, None, 0.5)
     return None
+
+
+def _source_from_external_fair(event: Event) -> FairPriceSource | None:
+    fair = _external_fair_jpy(event.payload)
+    if fair is None:
+        return None
+    source_name = str(event.payload.get("source") or "external_btc_usd_jpy")
+    spread = event.payload.get("spread_bps")
+    confidence = event.payload.get("confidence", 0.8)
+    return FairPriceSource(
+        source_name,
+        fair,
+        float(event.payload.get("ts_ms", event.ts_exchange)),
+        float(spread) if spread is not None else None,
+        float(confidence),
+    )
+
+
+def _external_fair_jpy(payload: dict) -> float | None:
+    direct = _positive_payload_float(payload.get("fair_jpy", payload.get("fair")))
+    if direct is not None:
+        return direct
+    btc_usd = _positive_payload_float(payload.get("btc_usd", payload.get("btc_price")))
+    usd_jpy = _positive_payload_float(payload.get("usd_jpy", payload.get("fx_rate_jpy")))
+    if btc_usd is None or usd_jpy is None:
+        return None
+    fair = btc_usd * usd_jpy
+    return fair if fair > 0 else None
+
+
+def _positive_payload_float(value: object) -> float | None:
+    if value is None:
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
 
 
 def _median_optional(values: list[float | None]) -> float | None:

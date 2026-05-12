@@ -70,6 +70,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--symbol", default="BTC/JPY")
     p.add_argument("--public-only", action="store_true")
 
+    p = sub.add_parser("ccxt-fair-snapshot")
+    p.add_argument("--exchange", required=True)
+    p.add_argument("--btc-usd-symbol", default="BTC/USD")
+    p.add_argument("--usd-jpy-symbol", default="USD/JPY")
+    p.add_argument("--symbol", default="BTC/JPY")
+    p.add_argument("--out", default=None)
+
     p = sub.add_parser("validate-bitbank-rules")
     p.add_argument("--pair", default="btc_jpy")
     p.add_argument("--config", default="configs/default.yaml")
@@ -182,6 +189,24 @@ def main(argv: list[str] | None = None) -> int:
             ticker = gateway.fetch_ticker(args.symbol)
             book = gateway.fetch_order_book(args.symbol, limit=5)
             print(json.dumps({"ticker": _compact(ticker), "order_book": _compact(book)}, default=str, sort_keys=True))
+            return 0
+        except (CcxtGatewayError, CcxtGatewayBlocked) as exc:
+            print(json.dumps({"blocked_or_unavailable": str(exc)}, sort_keys=True))
+            return 2
+
+    if args.command == "ccxt-fair-snapshot":
+        gateway = CcxtGateway(CcxtGatewayConfig(exchange_id=args.exchange))
+        try:
+            event = gateway.fetch_external_btc_usd_jpy_event(
+                btc_usd_symbol=args.btc_usd_symbol,
+                usd_jpy_symbol=args.usd_jpy_symbol,
+                symbol=args.symbol,
+            )
+            if args.out:
+                write_jsonl(args.out, [event])
+                print(json.dumps({"event_type": event.event_type, "out": args.out, "fair_jpy": event.payload["fair_jpy"]}, sort_keys=True))
+            else:
+                print(event.to_json())
             return 0
         except (CcxtGatewayError, CcxtGatewayBlocked) as exc:
             print(json.dumps({"blocked_or_unavailable": str(exc)}, sort_keys=True))

@@ -24,6 +24,8 @@ class GhostAmmPipeline:
         self.config = config
         symbol = str(config.get("symbol", "BTC/JPY"))
         venue = str(config.get("execution.venue", "bitbank"))
+        self.symbol = symbol
+        self.venue = venue
         inv_cfg = config.section("inventory")
         self.inventory = InventoryState(
             base_qty=float(inv_cfg.get("initial_base_qty", 0.01)),
@@ -74,8 +76,8 @@ class GhostAmmPipeline:
                 make_event(
                     "mark_price",
                     ts_exchange=event.ts_exchange,
-                    venue=event.venue,
-                    symbol=event.symbol,
+                    venue=self.venue,
+                    symbol=self.symbol,
                     sequence=event.sequence,
                     payload=asdict(fair_state),
                 )
@@ -117,8 +119,8 @@ class GhostAmmPipeline:
             make_event(
                 "risk_state",
                 ts_exchange=event.ts_exchange,
-                venue=event.venue,
-                symbol=event.symbol,
+                venue=self.venue,
+                symbol=self.symbol,
                 sequence=event.sequence,
                 payload=asdict(risk_decision)
                 | {
@@ -169,8 +171,8 @@ class GhostAmmPipeline:
             book=self.book,
             risk=risk_decision,
             now_ms=event.ts_exchange,
-            venue=event.venue,
-            symbol=event.symbol,
+            venue=self.venue,
+            symbol=self.symbol,
         )
         emitted.extend(projector_events)
         for out in projector_events:
