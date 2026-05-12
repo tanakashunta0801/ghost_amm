@@ -19,6 +19,7 @@ class RiskDecision:
     reason: str | None = None
     blocked_sides: list[str] = field(default_factory=list)
     cooldown_until_ms: float | None = None
+    side_block_reasons: dict[str, str] = field(default_factory=dict)
 
 
 class RiskKernel:
@@ -28,14 +29,18 @@ class RiskKernel:
         self.shock_cfg = shock_cfg
         self.amm_cfg = amm_cfg
         self.fill_history: deque[tuple[float, str]] = deque()
+        self.inventory_change_history: deque[tuple[float, str, float]] = deque()
         self.fill_burst_cooldown_until: dict[str, float] = {}
 
-    def record_fill(self, *, side: str, ts_ms: float) -> None:
-        max_fills = int(self.risk_cfg.get("max_same_side_fills_per_window", 0))
-        if max_fills <= 0:
-            return
+    def record_fill(self, *, side: str, ts_ms: float, price: float | None = None, amount: float | None = None) -> None:
         side = str(side)
         if side not in {"buy", "sell"}:
+            return
+        if price is not None and amount is not None:
+            notional = max(0.0, float(price) * float(amount))
+            self.inventory_change_history.append((ts_ms, side, notional))
+        max_fills = int(self.risk_cfg.get("max_same_side_fills_per_window", 0))
+        if max_fills <= 0:
             return
         window_ms = float(self.risk_cfg.get("fill_burst_window_ms", 10_000))
         cooldown_ms = float(self.risk_cfg.get("fill_burst_cooldown_ms", 60_000))
@@ -91,9 +96,18 @@ class RiskKernel:
             allow_buy = False
         if "sell" in fill_burst_blocked:
             allow_sell = False
-        reason = "fill_burst_cooldown" if fill_burst_blocked else None
+        side_block_reasons = {side: "fill_burst_cooldown" for side in fill_burst_blocked}
+        inventory_blocks = self._inventory_blocked_sides(inventory, fair_state.fair, max_size, now_ms)
+        for side, reason in inventory_blocks.items():
+            side_block_reasons.setdefault(side, reason)
+        if "buy" in side_block_reasons:
+            allow_buy = False
+        if "sell" in side_block_reasons:
+            allow_sell = False
+        blocked_sides = [side for side in ["buy", "sell"] if side in side_block_reasons]
+        reason = side_block_reasons[blocked_sides[0]] if blocked_sides else None
         cooldown_until = max((self.fill_burst_cooldown_until[side] for side in fill_burst_blocked), default=None)
-        return RiskDecision(allow_buy or allow_sell, allow_buy, allow_sell, max_size, reason, fill_burst_blocked, cooldown_until)
+        return RiskDecision(allow_buy or allow_sell, allow_buy, allow_sell, max_size, reason, blocked_sides, cooldown_until, side_block_reasons)
 
     def _expire_fill_history(self, now_ms: float, window_ms: float) -> None:
         while self.fill_history and now_ms - self.fill_history[0][0] > window_ms:
@@ -110,3 +124,43 @@ class RiskKernel:
             else:
                 self.fill_burst_cooldown_until.pop(side, None)
         return blocked
+
+    def _inventory_blocked_sides(self, inventory: InventoryState, fair: float, max_size: float, now_ms: float) -> dict[str, str]:
+        blocked: dict[str, str] = {}
+        buy_notional = max_size * fair
+        if not self.risk_cfg.get("negative_balances_allowed", False):
+            if inventory.quote_qty < buy_notional:
+                blocked["buy"] = "quote_balance_insufficient"
+            if inventory.base_qty < max_size:
+                blocked["sell"] = "base_balance_insufficient"
+
+        max_base = float(self.risk_cfg.get("max_base_qty", 0) or 0)
+        if max_base > 0 and inventory.base_qty + max_size > max_base:
+            blocked["buy"] = "max_base_qty"
+
+        max_quote_usage = float(self.risk_cfg.get("max_quote_usage_jpy", 0) or 0)
+        if max_quote_usage > 0:
+            initial_quote = float(self.risk_cfg.get("initial_quote_qty", inventory.quote_qty))
+            quote_used = max(0.0, initial_quote - inventory.quote_qty)
+            if quote_used + buy_notional > max_quote_usage:
+                blocked["buy"] = "max_quote_usage_jpy"
+
+        max_notional = float(self.risk_cfg.get("max_inventory_notional_jpy", 0) or 0)
+        if max_notional > 0 and (inventory.base_qty + max_size) * fair > max_notional:
+            blocked["buy"] = "max_inventory_notional_jpy"
+
+        max_one_side = float(self.risk_cfg.get("max_one_side_inventory_change_jpy_per_minute", 0) or 0)
+        if max_one_side > 0:
+            self._expire_inventory_change_history(now_ms)
+            recent_by_side = {
+                side: sum(notional for _, fill_side, notional in self.inventory_change_history if fill_side == side)
+                for side in ["buy", "sell"]
+            }
+            for side in ["buy", "sell"]:
+                if recent_by_side[side] + buy_notional > max_one_side:
+                    blocked[side] = "one_side_inventory_change_limit"
+        return blocked
+
+    def _expire_inventory_change_history(self, now_ms: float) -> None:
+        while self.inventory_change_history and now_ms - self.inventory_change_history[0][0] > 60_000:
+            self.inventory_change_history.popleft()

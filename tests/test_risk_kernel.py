@@ -99,3 +99,131 @@ def test_fill_burst_cooldown_can_block_all_quotes_when_both_sides_burst() -> Non
     assert not decision.allow_sell
     assert decision.reason == "fill_burst_cooldown"
     assert decision.blocked_sides == ["buy", "sell"]
+
+
+def test_inventory_max_base_qty_blocks_buy_only() -> None:
+    book = OrderBook("bitbank", "BTC/JPY")
+    book.apply_snapshot({"bids": [["99", "100000"]], "asks": [["101", "100000"]]}, 1, 1)
+    fair = FairPriceEngine(max_spread_bps=10_000, stale_after_ms=1000).from_orderbook(book, 1)
+    risk = RiskKernel(
+        market_cfg={"max_spread_bps": 500, "min_depth_20bps_jpy": 0},
+        risk_cfg={"block_on_pair_stop_flags": True, "max_abs_skew": 10, "max_base_qty": 1.5},
+        shock_cfg={"min_activation_to_quote": 0.1},
+        amm_cfg={"max_order_size": 1},
+    )
+
+    decision = risk.evaluate(
+        book=book,
+        fair_state=fair,
+        shock_state=ShockState(1, 1, 0, 0, 1, 1, None),
+        inventory=InventoryState(1, 1000),
+        pair_spec=fallback_btc_jpy_spec(),
+        status=BitbankStatus("btc_jpy", "NORMAL", 0.0001),
+        now_ms=1,
+    )
+
+    assert decision.allow_quote
+    assert not decision.allow_buy
+    assert decision.allow_sell
+    assert decision.side_block_reasons["buy"] == "max_base_qty"
+
+
+def test_inventory_balance_limits_block_unfunded_sides() -> None:
+    book = OrderBook("bitbank", "BTC/JPY")
+    book.apply_snapshot({"bids": [["99", "100000"]], "asks": [["101", "100000"]]}, 1, 1)
+    fair = FairPriceEngine(max_spread_bps=10_000, stale_after_ms=1000).from_orderbook(book, 1)
+    risk = RiskKernel(
+        market_cfg={"max_spread_bps": 500, "min_depth_20bps_jpy": 0},
+        risk_cfg={"block_on_pair_stop_flags": True, "max_abs_skew": 10},
+        shock_cfg={"min_activation_to_quote": 0.1},
+        amm_cfg={"max_order_size": 1},
+    )
+
+    decision = risk.evaluate(
+        book=book,
+        fair_state=fair,
+        shock_state=ShockState(1, 1, 0, 0, 1, 1, None),
+        inventory=InventoryState(0.5, 50),
+        pair_spec=fallback_btc_jpy_spec(),
+        status=BitbankStatus("btc_jpy", "NORMAL", 0.0001),
+        now_ms=1,
+    )
+
+    assert not decision.allow_quote
+    assert decision.side_block_reasons["buy"] == "quote_balance_insufficient"
+    assert decision.side_block_reasons["sell"] == "base_balance_insufficient"
+
+
+def test_max_quote_usage_blocks_buy_only() -> None:
+    book = OrderBook("bitbank", "BTC/JPY")
+    book.apply_snapshot({"bids": [["99", "100000"]], "asks": [["101", "100000"]]}, 1, 1)
+    fair = FairPriceEngine(max_spread_bps=10_000, stale_after_ms=1000).from_orderbook(book, 1)
+    risk = RiskKernel(
+        market_cfg={"max_spread_bps": 500, "min_depth_20bps_jpy": 0},
+        risk_cfg={
+            "block_on_pair_stop_flags": True,
+            "max_abs_skew": 10,
+            "initial_quote_qty": 1000,
+            "max_quote_usage_jpy": 100,
+        },
+        shock_cfg={"min_activation_to_quote": 0.1},
+        amm_cfg={"max_order_size": 1},
+    )
+
+    decision = risk.evaluate(
+        book=book,
+        fair_state=fair,
+        shock_state=ShockState(1, 1, 0, 0, 1, 1, None),
+        inventory=InventoryState(2, 950),
+        pair_spec=fallback_btc_jpy_spec(),
+        status=BitbankStatus("btc_jpy", "NORMAL", 0.0001),
+        now_ms=1,
+    )
+
+    assert decision.allow_quote
+    assert not decision.allow_buy
+    assert decision.allow_sell
+    assert decision.side_block_reasons["buy"] == "max_quote_usage_jpy"
+
+
+def test_one_side_inventory_change_per_minute_blocks_and_expires() -> None:
+    book = OrderBook("bitbank", "BTC/JPY")
+    book.apply_snapshot({"bids": [["99", "100000"]], "asks": [["101", "100000"]]}, 1, 1)
+    fair = FairPriceEngine(max_spread_bps=10_000, stale_after_ms=1000).from_orderbook(book, 1)
+    risk = RiskKernel(
+        market_cfg={"max_spread_bps": 500, "min_depth_20bps_jpy": 0},
+        risk_cfg={
+            "block_on_pair_stop_flags": True,
+            "max_abs_skew": 10,
+            "max_one_side_inventory_change_jpy_per_minute": 150,
+        },
+        shock_cfg={"min_activation_to_quote": 0.1},
+        amm_cfg={"max_order_size": 1},
+    )
+    risk.record_fill(side="buy", ts_ms=1, price=100, amount=1)
+
+    blocked = risk.evaluate(
+        book=book,
+        fair_state=fair,
+        shock_state=ShockState(1, 1, 0, 0, 1, 1, None),
+        inventory=InventoryState(2, 1000),
+        pair_spec=fallback_btc_jpy_spec(),
+        status=BitbankStatus("btc_jpy", "NORMAL", 0.0001),
+        now_ms=2,
+    )
+    assert blocked.allow_quote
+    assert not blocked.allow_buy
+    assert blocked.allow_sell
+    assert blocked.side_block_reasons["buy"] == "one_side_inventory_change_limit"
+
+    expired = risk.evaluate(
+        book=book,
+        fair_state=fair,
+        shock_state=ShockState(1, 1, 0, 0, 1, 1, None),
+        inventory=InventoryState(2, 1000),
+        pair_spec=fallback_btc_jpy_spec(),
+        status=BitbankStatus("btc_jpy", "NORMAL", 0.0001),
+        now_ms=61_002,
+    )
+    assert expired.allow_buy
+    assert expired.allow_sell

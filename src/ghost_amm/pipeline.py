@@ -33,6 +33,9 @@ class GhostAmmPipeline:
         self.fair_engine = FairPriceEngine.from_config(market_cfg=config.section("market"), fair_cfg=config.section("fair"))
         risk_cfg = dict(config.section("risk"))
         risk_cfg["max_abs_skew"] = inv_cfg.get("max_abs_skew", 10)
+        risk_cfg["initial_base_qty"] = inv_cfg.get("initial_base_qty", 0.01)
+        risk_cfg["initial_quote_qty"] = inv_cfg.get("initial_quote_qty", 150_000)
+        risk_cfg["negative_balances_allowed"] = inv_cfg.get("negative_balances_allowed", False)
         self.risk = RiskKernel(
             market_cfg=config.section("market"),
             risk_cfg=risk_cfg,
@@ -87,7 +90,12 @@ class GhostAmmPipeline:
                 amount=float(fill.payload["fill_size"]),
                 fee=float(fill.payload["fee"]),
             )
-            self.risk.record_fill(side=str(fill.payload["side"]), ts_ms=float(fill.payload["fill_ts"]))
+            self.risk.record_fill(
+                side=str(fill.payload["side"]),
+                ts_ms=float(fill.payload["fill_ts"]),
+                price=float(fill.payload["fill_price"]),
+                amount=float(fill.payload["fill_size"]),
+            )
             self.projector.remove_filled(str(fill.payload["order_id"]))
             emitted.append(fill)
 

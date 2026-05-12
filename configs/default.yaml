@@ -120,6 +120,10 @@ risk:
   max_same_side_fills_per_window: 3
   fill_burst_window_ms: 10000
   fill_burst_cooldown_ms: 60000
+  max_base_qty: 0
+  max_quote_usage_jpy: 0
+  max_inventory_notional_jpy: 0
+  max_one_side_inventory_change_jpy_per_minute: 0
   block_on_sequence_ordering_violation: true
   block_on_bitbank_status_not_normal: true
   block_on_pair_stop_flags: true
