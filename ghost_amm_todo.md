@@ -40,6 +40,7 @@ uv run --extra test pytest -q
 - TODO-021: live order intent and live order blocked events are separated.
 - TODO-022: future live gate conditions are explicit, and MVP still blocks real submission.
 - Recording gate: `validate-public-recording` fails closed on strict inspection errors before writing replay reports.
+- Quality gate: `evaluate-quality-gate` fails closed unless inspection duration, fills, alpha, and churn thresholds pass across multiple reports.
 
 ## In Progress
 
@@ -56,7 +57,7 @@ uv run --extra test pytest -q
 
 ## Latest Real-Data Check
 
-Checked on 2026-05-12 with the existing 12h recording:
+Checked on 2026-05-12 with the existing 12h-named recording:
 
 ```powershell
 uv run ghost-amm validate-public-recording `
@@ -68,10 +69,12 @@ uv run ghost-amm validate-public-recording `
 Result:
 
 - strict inspection passed: 163,422 source events, no sequence violations, metadata present, ticker/trade/depth coverage present.
+- actual inspected duration was 5.92h, so this does not satisfy the 24h recording gate.
 - default config produced 0 virtual orders and 0 fills because `activation_too_low` dominated all risk blocks.
 - `configs/diagnostic_relaxed_activation.yaml` produced 22,157 virtual orders but 0 fills, with very high quote churn.
 - `configs/diagnostic_controlled_churn.yaml` produced 888 virtual orders and 1 fill.
 - controlled churn summary: `strategy_alpha_pnl=-4.82625`, `fill_rate=0.001126`, `orders_per_minute=2.499`, `cancels_per_minute=2.496`.
+- `evaluate-quality-gate` failed as expected: only 1 report, 5.92h duration, 1 fill, and negative strategy alpha.
 
 Interpretation:
 
@@ -131,6 +134,11 @@ uv run ghost-amm validate-public-recording `
   --events data/raw/bitbank_btc_jpy_24h.jsonl `
   --config configs/default.yaml `
   --out data/reports/bitbank_btc_jpy_24h
+
+uv run ghost-amm evaluate-quality-gate `
+  --summary data/reports/bitbank_btc_jpy_24h_config_a/summary.json data/reports/bitbank_btc_jpy_24h_config_b/summary.json `
+  --recording-inspection data/reports/bitbank_btc_jpy_24h_config_a/recording_inspection.json `
+  --out data/reports/bitbank_btc_jpy_24h_quality_gate.json
 ```
 
 ## Pre-Live Completion Gates

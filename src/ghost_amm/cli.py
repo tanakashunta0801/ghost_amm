@@ -8,6 +8,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from ghost_amm.analytics.metrics import summarize
+from ghost_amm.analytics.quality_gate import QualityGateThresholds, evaluate_quality_gate, write_quality_gate_result
 from ghost_amm.analytics.report import write_report
 from ghost_amm.analytics.risk_diagnostics import analyze_risk_blocks, write_risk_diagnostics
 from ghost_amm.analytics.sweep import run_activation_sweep, run_churn_sweep
@@ -93,6 +94,18 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--strict", action=argparse.BooleanOptionalAction, default=True)
     p.add_argument("--replay-order", choices=["arrival_order", "exchange_time_sort"], default="arrival_order")
     p.add_argument("--strict-sequence", action=argparse.BooleanOptionalAction, default=None)
+
+    p = sub.add_parser("evaluate-quality-gate")
+    p.add_argument("--summary", required=True, nargs="+")
+    p.add_argument("--recording-inspection", required=True)
+    p.add_argument("--out", default=None)
+    p.add_argument("--min-report-count", type=int, default=2)
+    p.add_argument("--min-recording-hours", type=float, default=24.0)
+    p.add_argument("--min-fills", type=int, default=30)
+    p.add_argument("--min-fill-rate", type=float, default=0.001)
+    p.add_argument("--min-strategy-alpha-pnl", type=float, default=0.0)
+    p.add_argument("--max-orders-per-minute", type=float, default=10.0)
+    p.add_argument("--max-cancels-per-minute", type=float, default=10.0)
 
     p = sub.add_parser("analyze-risk-blocks")
     p.add_argument("--events", required=True, nargs="+")
@@ -300,6 +313,25 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
         return 0
+
+    if args.command == "evaluate-quality-gate":
+        result = evaluate_quality_gate(
+            summary_paths=args.summary,
+            recording_inspection_path=args.recording_inspection,
+            thresholds=QualityGateThresholds(
+                min_report_count=args.min_report_count,
+                min_recording_hours=args.min_recording_hours,
+                min_fills=args.min_fills,
+                min_fill_rate=args.min_fill_rate,
+                min_strategy_alpha_pnl=args.min_strategy_alpha_pnl,
+                max_orders_per_minute=args.max_orders_per_minute,
+                max_cancels_per_minute=args.max_cancels_per_minute,
+            ),
+        )
+        if args.out:
+            write_quality_gate_result(args.out, result)
+        print(json.dumps(result.to_dict(), ensure_ascii=False, sort_keys=True))
+        return 0 if result.ok else 1
 
     if args.command == "analyze-risk-blocks":
         events = []

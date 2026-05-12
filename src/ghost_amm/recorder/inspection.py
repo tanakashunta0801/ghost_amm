@@ -29,6 +29,10 @@ class RecordingInspection:
     transaction_count: int
     reconnect_count: int
     connection_events: int
+    first_event_ts: float | None
+    last_event_ts: float | None
+    duration_ms: float | None
+    duration_hours: float | None
     max_event_gap_ms: float | None
     max_local_exchange_drift_ms: float | None
     metadata_fetch_failed: bool
@@ -49,6 +53,8 @@ def inspect_recording(paths: Iterable[str | Path], *, strict: bool = False) -> R
     depth_snapshot_first_ts: float | None = None
     depth_snapshot_last_ts: float | None = None
     last_event_ts: float | None = None
+    first_event_ts: float | None = None
+    final_event_ts: float | None = None
     max_event_gap_ms: float | None = None
     max_local_exchange_drift_ms: float | None = None
     reconnect_count = 0
@@ -66,6 +72,8 @@ def inspect_recording(paths: Iterable[str | Path], *, strict: bool = False) -> R
                 ts_exchange = _to_float(data.get("ts_exchange"))
                 ts_local = _to_float(data.get("ts_local"))
                 if ts_exchange is not None:
+                    first_event_ts = ts_exchange if first_event_ts is None else first_event_ts
+                    final_event_ts = ts_exchange
                     if last_event_ts is not None:
                         gap = max(0.0, ts_exchange - last_event_ts)
                         max_event_gap_ms = gap if max_event_gap_ms is None else max(max_event_gap_ms, gap)
@@ -127,6 +135,11 @@ def inspect_recording(paths: Iterable[str | Path], *, strict: bool = False) -> R
         reason = "metadata_fetch_failed"
     elif sequence_violations:
         reason = "sequence_violations"
+    duration_ms = None
+    duration_hours = None
+    if first_event_ts is not None and final_event_ts is not None:
+        duration_ms = max(0.0, final_event_ts - first_event_ts)
+        duration_hours = duration_ms / 3_600_000
     return RecordingInspection(
         files=len(path_list),
         events=events,
@@ -146,6 +159,10 @@ def inspect_recording(paths: Iterable[str | Path], *, strict: bool = False) -> R
         transaction_count=transaction_count,
         reconnect_count=reconnect_count,
         connection_events=connection_events,
+        first_event_ts=first_event_ts,
+        last_event_ts=final_event_ts,
+        duration_ms=duration_ms,
+        duration_hours=duration_hours,
         max_event_gap_ms=max_event_gap_ms,
         max_local_exchange_drift_ms=max_local_exchange_drift_ms,
         metadata_fetch_failed=metadata_fetch_failed,

@@ -34,6 +34,10 @@ def test_recording_inspection_requires_metadata_and_market_events(tmp_path) -> N
     assert result.depth_snapshot_last_ts == 4
     assert result.ticker_count == 1
     assert result.transaction_count == 1
+    assert result.first_event_ts == 1
+    assert result.last_event_ts == 6
+    assert result.duration_ms == 5
+    assert result.duration_hours == 5 / 3_600_000
     assert result.max_event_gap_ms == 1
     assert result.max_local_exchange_drift_ms == 0
 

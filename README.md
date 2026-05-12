@@ -67,6 +67,15 @@ uv run ghost-amm validate-public-recording `
   --out data/reports/bitbank_btc_jpy_1h
 ```
 
+Evaluate whether generated reports satisfy the pre-live quality gate:
+
+```powershell
+uv run ghost-amm evaluate-quality-gate `
+  --summary data/reports/bitbank_btc_jpy_24h_config_a/summary.json data/reports/bitbank_btc_jpy_24h_config_b/summary.json `
+  --recording-inspection data/reports/bitbank_btc_jpy_24h_config_a/recording_inspection.json `
+  --out data/reports/bitbank_btc_jpy_24h_quality_gate.json
+```
+
 ## External Fair Price Events
 
 Replay can consume `external_fair_price` events as an additional robust-fair source. A CCXT public ticker snapshot can be converted to one JSONL event by combining BTC/USD and USD/JPY:
