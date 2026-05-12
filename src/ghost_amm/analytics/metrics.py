@@ -23,6 +23,14 @@ class MetricsSummary:
     average_adverse_1s: float | None
     average_adverse_5s: float | None
     average_adverse_30s: float | None
+    average_adverse_1s_buy: float | None
+    average_adverse_1s_sell: float | None
+    average_adverse_5s_buy: float | None
+    average_adverse_5s_sell: float | None
+    average_adverse_30s_buy: float | None
+    average_adverse_30s_sell: float | None
+    worst_adverse_buy: float | None
+    worst_adverse_sell: float | None
     pnl_by_shock_event: float
     pnl_outside_shock_events: float
     max_inventory_skew: float | None
@@ -42,6 +50,10 @@ def summarize(events: list[Event], *, initial_base: float, initial_quote: float,
     adverse_1s: list[float] = []
     adverse_5s: list[float] = []
     adverse_30s: list[float] = []
+    adverse_by_side: dict[str, dict[str, list[float]]] = {
+        "buy": {"1s": [], "5s": [], "30s": []},
+        "sell": {"1s": [], "5s": [], "30s": []},
+    }
     spread_capture: list[float] = []
     fill_values: list[float] = []
     for fill in fills:
@@ -63,11 +75,18 @@ def summarize(events: list[Event], *, initial_base: float, initial_quote: float,
             base -= size
             cash += price * size - fee
             realized -= fee
-        for horizon, bucket in [("fair_after_1s", adverse_1s), ("fair_after_5s", adverse_5s), ("fair_after_30s", adverse_30s)]:
+        for horizon, label, bucket in [
+            ("fair_after_1s", "1s", adverse_1s),
+            ("fair_after_5s", "5s", adverse_5s),
+            ("fair_after_30s", "30s", adverse_30s),
+        ]:
             fair_after = fill.payload.get(horizon)
             if fair_after is None:
                 continue
-            bucket.append((float(fair_after) - price) if side == "buy" else (price - float(fair_after)))
+            adverse = (float(fair_after) - price) if side == "buy" else (price - float(fair_after))
+            bucket.append(adverse)
+            if side in adverse_by_side:
+                adverse_by_side[side][label].append(adverse)
         value = (last_fair or price) * base + cash
         fill_values.append(value)
 
@@ -101,6 +120,14 @@ def summarize(events: list[Event], *, initial_base: float, initial_quote: float,
         average_adverse_1s=_avg(adverse_1s),
         average_adverse_5s=_avg(adverse_5s),
         average_adverse_30s=_avg(adverse_30s),
+        average_adverse_1s_buy=_avg(adverse_by_side["buy"]["1s"]),
+        average_adverse_1s_sell=_avg(adverse_by_side["sell"]["1s"]),
+        average_adverse_5s_buy=_avg(adverse_by_side["buy"]["5s"]),
+        average_adverse_5s_sell=_avg(adverse_by_side["sell"]["5s"]),
+        average_adverse_30s_buy=_avg(adverse_by_side["buy"]["30s"]),
+        average_adverse_30s_sell=_avg(adverse_by_side["sell"]["30s"]),
+        worst_adverse_buy=_min_nested(adverse_by_side["buy"].values()),
+        worst_adverse_sell=_min_nested(adverse_by_side["sell"].values()),
         pnl_by_shock_event=total_pnl if any(event.event_type == "forced_flow" for event in events) else 0.0,
         pnl_outside_shock_events=0.0 if any(event.event_type == "forced_flow" for event in events) else total_pnl,
         max_inventory_skew=max(skews_f) if skews_f else None,
@@ -129,3 +156,8 @@ def _max_drawdown(values: list[float]) -> float:
         peak = value if peak is None else max(peak, value)
         drawdown = max(drawdown, peak - value)
     return drawdown
+
+
+def _min_nested(groups) -> float | None:
+    values = [value for group in groups for value in group]
+    return min(values) if values else None
