@@ -34,6 +34,7 @@ def test_run_public_data_gate_writes_inspection_replays_and_quality_gate(tmp_pat
     assert payload["ok"] is False
     assert payload["recording_inspection"] == str(out / "recording_inspection.json")
     assert payload["quality_gate"] == str(out / "quality_gate.json")
+    assert payload["prevent_sleep"]["enabled"] is False
     assert len(payload["replays"]) == 2
     assert (out / "01_default" / "summary.json").exists()
     assert (out / "02_default" / "summary.json").exists()
@@ -63,6 +64,7 @@ def test_run_public_data_gate_stops_before_replay_when_inspection_fails(tmp_path
     assert payload["ok"] is False
     assert payload["stage"] == "inspect_recording"
     assert payload["reason"] == "missing:bitbank_ticker,trade"
+    assert payload["prevent_sleep"]["enabled"] is False
     assert (out / "recording_inspection.json").exists()
     assert not (out / "quality_gate.json").exists()
     assert not (out / "01_default" / "summary.json").exists()

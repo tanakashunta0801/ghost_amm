@@ -133,6 +133,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--min-strategy-alpha-pnl", type=float, default=0.0)
     p.add_argument("--max-orders-per-minute", type=float, default=10.0)
     p.add_argument("--max-cancels-per-minute", type=float, default=10.0)
+    p.add_argument("--prevent-sleep", action="store_true")
 
     p = sub.add_parser("analyze-risk-blocks")
     p.add_argument("--events", required=True, nargs="+")
@@ -381,76 +382,18 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if result.ok else 1
 
     if args.command == "run-public-data-gate":
-        out = Path(args.out)
-        out.mkdir(parents=True, exist_ok=True)
-        inspection = inspect_recording(args.events, strict=args.strict)
-        inspection_path = out / "recording_inspection.json"
-        _write_json(inspection_path, inspection.to_dict())
-        if not inspection.ok_for_replay:
-            payload = {
-                "ok": False,
-                "stage": "inspect_recording",
-                "reason": inspection.reason,
-                "recording_inspection": str(inspection_path),
-            }
-            _write_json(out / "public_data_gate.json", payload)
-            print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
-            return 1
-        summary_paths = []
-        replay_results = []
-        for index, config_path in enumerate(args.configs, start=1):
-            cfg_path = Path(config_path)
-            if not cfg_path.exists():
-                payload = {"ok": False, "stage": "config", "reason": "config_not_found", "path": str(cfg_path)}
+        with SystemSleepPreventer(enabled=args.prevent_sleep) as sleep_prevention:
+            sleep_status = sleep_prevention.to_dict()
+            if args.prevent_sleep and not sleep_prevention.active:
+                out = Path(args.out)
+                out.mkdir(parents=True, exist_ok=True)
+                payload = {"ok": False, "stage": "prevent_sleep", "reason": "prevent_sleep_unavailable", "prevent_sleep": sleep_status}
                 _write_json(out / "public_data_gate.json", payload)
                 print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
                 return 1
-            run_out = out / f"{index:02d}_{cfg_path.stem}"
-            engine = ReplayEngine(load_config(cfg_path))
-            try:
-                output = engine.run_files(
-                    args.events,
-                    run_out,
-                    replay_order=args.replay_order,
-                    strict_sequence=args.strict_sequence,
-                )
-            except ValueError as exc:
-                payload = {"ok": False, "stage": "replay", "reason": str(exc), "config": str(cfg_path), "out": str(run_out)}
-                _write_json(out / "public_data_gate.json", payload)
-                print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
-                return 1
-            summary_path = run_out / "summary.json"
-            summary_paths.append(summary_path)
-            replay_results.append(
-                {
-                    "config": str(cfg_path),
-                    "out": str(run_out),
-                    "summary": str(summary_path),
-                    "events": len(output),
-                    "virtual_orders": sum(1 for event in output if event.event_type == "virtual_order_placed"),
-                    "virtual_fills": sum(1 for event in output if event.event_type == "virtual_fill"),
-                    "replay_order": engine.last_replay_order,
-                    "strict_sequence": engine.last_strict_sequence,
-                }
-            )
-        quality = evaluate_quality_gate(
-            summary_paths=summary_paths,
-            recording_inspection_path=inspection_path,
-            thresholds=_quality_gate_thresholds(args),
-        )
-        quality_path = out / "quality_gate.json"
-        write_quality_gate_result(quality_path, quality)
-        payload = {
-            "ok": quality.ok,
-            "recording_inspection": str(inspection_path),
-            "quality_gate": str(quality_path),
-            "replays": replay_results,
-            "quality_failures": quality.failures,
-            "out": str(out),
-        }
-        _write_json(out / "public_data_gate.json", payload)
+            code, payload = _run_public_data_gate(args, prevent_sleep=sleep_status)
         print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
-        return 0 if quality.ok else 1
+        return code
 
     if args.command == "analyze-risk-blocks":
         events = []
@@ -522,6 +465,90 @@ def _write_json(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as fh:
         json.dump(data, fh, ensure_ascii=False, indent=2, sort_keys=True)
+
+
+def _run_public_data_gate(args: argparse.Namespace, *, prevent_sleep: dict) -> tuple[int, dict]:
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    inspection = inspect_recording(args.events, strict=args.strict)
+    inspection_path = out / "recording_inspection.json"
+    _write_json(inspection_path, inspection.to_dict())
+    if not inspection.ok_for_replay:
+        payload = {
+            "ok": False,
+            "stage": "inspect_recording",
+            "reason": inspection.reason,
+            "recording_inspection": str(inspection_path),
+            "prevent_sleep": prevent_sleep,
+        }
+        _write_json(out / "public_data_gate.json", payload)
+        return 1, payload
+    summary_paths = []
+    replay_results = []
+    for index, config_path in enumerate(args.configs, start=1):
+        cfg_path = Path(config_path)
+        if not cfg_path.exists():
+            payload = {
+                "ok": False,
+                "stage": "config",
+                "reason": "config_not_found",
+                "path": str(cfg_path),
+                "prevent_sleep": prevent_sleep,
+            }
+            _write_json(out / "public_data_gate.json", payload)
+            return 1, payload
+        run_out = out / f"{index:02d}_{cfg_path.stem}"
+        engine = ReplayEngine(load_config(cfg_path))
+        try:
+            output = engine.run_files(
+                args.events,
+                run_out,
+                replay_order=args.replay_order,
+                strict_sequence=args.strict_sequence,
+            )
+        except ValueError as exc:
+            payload = {
+                "ok": False,
+                "stage": "replay",
+                "reason": str(exc),
+                "config": str(cfg_path),
+                "out": str(run_out),
+                "prevent_sleep": prevent_sleep,
+            }
+            _write_json(out / "public_data_gate.json", payload)
+            return 1, payload
+        summary_path = run_out / "summary.json"
+        summary_paths.append(summary_path)
+        replay_results.append(
+            {
+                "config": str(cfg_path),
+                "out": str(run_out),
+                "summary": str(summary_path),
+                "events": len(output),
+                "virtual_orders": sum(1 for event in output if event.event_type == "virtual_order_placed"),
+                "virtual_fills": sum(1 for event in output if event.event_type == "virtual_fill"),
+                "replay_order": engine.last_replay_order,
+                "strict_sequence": engine.last_strict_sequence,
+            }
+        )
+    quality = evaluate_quality_gate(
+        summary_paths=summary_paths,
+        recording_inspection_path=inspection_path,
+        thresholds=_quality_gate_thresholds(args),
+    )
+    quality_path = out / "quality_gate.json"
+    write_quality_gate_result(quality_path, quality)
+    payload = {
+        "ok": quality.ok,
+        "recording_inspection": str(inspection_path),
+        "quality_gate": str(quality_path),
+        "replays": replay_results,
+        "quality_failures": quality.failures,
+        "prevent_sleep": prevent_sleep,
+        "out": str(out),
+    }
+    _write_json(out / "public_data_gate.json", payload)
+    return (0 if quality.ok else 1), payload
 
 
 def _expand_path_args(paths: list[str]) -> list[str]:

@@ -98,11 +98,12 @@ After a long public recording finishes, run the public-data gate to inspect once
 uv run ghost-amm run-public-data-gate `
   --events data/raw/bitbank_btc_jpy_24h_20260512_234537*.jsonl `
   --configs configs/default.yaml configs/diagnostic_controlled_churn.yaml `
-  --out data/reports/bitbank_btc_jpy_24h_gate
+  --out data/reports/bitbank_btc_jpy_24h_gate `
+  --prevent-sleep
 ```
 
 The command writes `recording_inspection.json`, one replay report directory per config, `quality_gate.json`, and `public_data_gate.json`. It exits non-zero unless strict recording inspection and the configured quality thresholds pass.
-The CLI expands `--events` wildcards itself, so the `*.jsonl` form works in PowerShell.
+The CLI expands `--events` wildcards itself, so the `*.jsonl` form works in PowerShell. On Windows, `--prevent-sleep` keeps the system awake during the post-recording replay and quality-gate pass.
 
 ## External Fair Price Events
 

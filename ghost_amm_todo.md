@@ -47,6 +47,7 @@ uv run --extra test pytest -q
 - Public data gate runner: `run-public-data-gate` inspects a recording once, replays multiple configs, writes per-config reports, and evaluates `quality_gate.json`.
 - CLI event inputs expand wildcards internally, so rotated JSONL sets like `data/raw/bitbank_btc_jpy_24h_*.jsonl` work in PowerShell.
 - Recording monitor supports `--min-duration-hours`, so 24h gate checks fail explicitly on partial recordings.
+- Public data gate runner supports `--prevent-sleep`, so Windows can stay awake during long post-recording replay and quality checks.
 
 ## In Progress
 
@@ -189,7 +190,8 @@ One-shot 24h public data gate:
 uv run ghost-amm run-public-data-gate `
   --events data/raw/bitbank_btc_jpy_24h_20260512_234537*.jsonl `
   --configs configs/default.yaml configs/diagnostic_controlled_churn.yaml `
-  --out data/reports/bitbank_btc_jpy_24h_gate
+  --out data/reports/bitbank_btc_jpy_24h_gate `
+  --prevent-sleep
 ```
 
 ## Pre-Live Completion Gates
