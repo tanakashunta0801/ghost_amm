@@ -30,6 +30,7 @@ class BitbankPublicRecorder(EventRecorder):
         flush_every_events: int = 1,
         max_reconnects: int = 10,
         reconnect_delay_sec: float = 3.0,
+        heartbeat_interval_sec: float | None = 60.0,
     ) -> None:
         self.pair = pair
         self.channels = list(channels or [f"ticker_{pair}", f"transactions_{pair}", f"depth_whole_{pair}", f"depth_diff_{pair}"])
@@ -45,6 +46,7 @@ class BitbankPublicRecorder(EventRecorder):
         self.flush_every_events = flush_every_events
         self.max_reconnects = max_reconnects
         self.reconnect_delay_sec = reconnect_delay_sec
+        self.heartbeat_interval_sec = heartbeat_interval_sec
         self.events: list[Event] = []
         self.output_paths: list[Path] = []
 
@@ -81,7 +83,7 @@ class BitbankPublicRecorder(EventRecorder):
                             ts_exchange=now_ms(),
                             venue="bitbank",
                             symbol=self.pair.upper().replace("_", "/"),
-                            payload={"mode": "record_bitbank_public", "connected": True, "reconnects": reconnects},
+                            payload={"mode": "record_bitbank_public", "heartbeat_type": "connect", "connected": True, "reconnects": reconnects},
                         ),
                         writer,
                     )
@@ -94,7 +96,7 @@ class BitbankPublicRecorder(EventRecorder):
                             ts_exchange=now_ms(),
                             venue="bitbank",
                             symbol=self.pair.upper().replace("_", "/"),
-                            payload={"mode": "record_bitbank_public", "connected": False, "reconnects": reconnects},
+                            payload={"mode": "record_bitbank_public", "heartbeat_type": "disconnect", "connected": False, "reconnects": reconnects},
                         ),
                         writer,
                     )
@@ -113,6 +115,7 @@ class BitbankPublicRecorder(EventRecorder):
 
                 try:
                     await sio.connect(_socketio_base_url(self.url), transports=["websocket"])
+                    heartbeat_task = asyncio.create_task(self._heartbeat_loop(done, writer, reconnects))
                     wait_timeout = None
                     if self.timeout_sec is not None:
                         elapsed_sec = (now_ms() - started_ms) / 1000
@@ -141,6 +144,13 @@ class BitbankPublicRecorder(EventRecorder):
                         writer,
                     )
                 finally:
+                    if "heartbeat_task" in locals():
+                        heartbeat_task.cancel()
+                        try:
+                            await heartbeat_task
+                        except asyncio.CancelledError:
+                            pass
+                        del heartbeat_task
                     if sio.connected:
                         await sio.disconnect()
 
@@ -171,6 +181,31 @@ class BitbankPublicRecorder(EventRecorder):
     def _record(self, event: Event, writer: RotatingJsonlEventWriter) -> None:
         self.events.append(event)
         writer.write(event)
+
+    async def _heartbeat_loop(self, done: asyncio.Event, writer: RotatingJsonlEventWriter, reconnects: int) -> None:
+        interval = self.heartbeat_interval_sec
+        if interval is None or interval <= 0:
+            return
+        while not done.is_set():
+            await asyncio.sleep(interval)
+            if done.is_set():
+                return
+            self._record(
+                make_event(
+                    "dry_run_heartbeat",
+                    ts_exchange=now_ms(),
+                    venue="bitbank",
+                    symbol=self.pair.upper().replace("_", "/"),
+                    payload={
+                        "mode": "record_bitbank_public",
+                        "heartbeat_type": "periodic",
+                        "connected": True,
+                        "reconnects": reconnects,
+                        "heartbeat_interval_sec": interval,
+                    },
+                ),
+                writer,
+            )
 
     def _metadata_events(self) -> list[Event]:
         ts = now_ms()

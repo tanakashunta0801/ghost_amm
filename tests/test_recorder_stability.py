@@ -98,10 +98,46 @@ def test_recording_inspection_reports_channel_gap_drift_and_reconnects(tmp_path)
 
     assert result.rooms["ticker_btc_jpy"] == 1
     assert result.rooms["depth_whole_btc_jpy"] == 1
+    assert result.heartbeat_events == 1
     assert result.connection_events == 1
     assert result.reconnect_count == 2
     assert result.max_event_gap_ms == 10
     assert result.max_local_exchange_drift_ms == 10
+
+
+def test_recording_inspection_distinguishes_periodic_heartbeats_from_connection_events(tmp_path) -> None:
+    out = tmp_path / "heartbeats.jsonl"
+    events = [
+        make_event(
+            "dry_run_heartbeat",
+            ts_exchange=1,
+            venue="bitbank",
+            symbol="BTC/JPY",
+            payload={"mode": "record_bitbank_public", "heartbeat_type": "connect", "connected": True, "reconnects": 0},
+        ),
+        make_event(
+            "dry_run_heartbeat",
+            ts_exchange=2,
+            venue="bitbank",
+            symbol="BTC/JPY",
+            payload={"mode": "record_bitbank_public", "heartbeat_type": "periodic", "connected": True, "reconnects": 0},
+        ),
+        make_event(
+            "dry_run_heartbeat",
+            ts_exchange=3,
+            venue="bitbank",
+            symbol="BTC/JPY",
+            payload={"mode": "record_bitbank_public", "heartbeat_type": "disconnect", "connected": False, "reconnects": 0},
+        ),
+    ]
+    with RotatingJsonlEventWriter(out) as writer:
+        for event in events:
+            writer.write(event)
+
+    result = inspect_recording([out])
+
+    assert result.heartbeat_events == 3
+    assert result.connection_events == 2
 
 
 def test_recording_inspection_fails_on_metadata_fetch_failure(tmp_path) -> None:

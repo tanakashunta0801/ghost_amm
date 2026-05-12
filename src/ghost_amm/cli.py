@@ -58,6 +58,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--flush-every-events", type=int, default=1)
     p.add_argument("--max-reconnects", type=int, default=10)
     p.add_argument("--reconnect-delay-sec", type=float, default=3.0)
+    p.add_argument("--heartbeat-interval-sec", type=float, default=60.0)
     p.add_argument("--no-metadata", action="store_true")
     p.add_argument("--prevent-sleep", action="store_true")
 
@@ -194,6 +195,7 @@ def main(argv: list[str] | None = None) -> int:
             flush_every_events=args.flush_every_events,
             max_reconnects=args.max_reconnects,
             reconnect_delay_sec=args.reconnect_delay_sec,
+            heartbeat_interval_sec=args.heartbeat_interval_sec,
         )
         with SystemSleepPreventer(enabled=args.prevent_sleep) as sleep_prevention:
             if args.prevent_sleep and not sleep_prevention.active:

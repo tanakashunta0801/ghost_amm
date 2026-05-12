@@ -28,6 +28,7 @@ class RecordingInspection:
     ticker_count: int
     transaction_count: int
     reconnect_count: int
+    heartbeat_events: int
     connection_events: int
     first_event_ts: float | None
     last_event_ts: float | None
@@ -58,6 +59,7 @@ def inspect_recording(paths: Iterable[str | Path], *, strict: bool = False) -> R
     max_event_gap_ms: float | None = None
     max_local_exchange_drift_ms: float | None = None
     reconnect_count = 0
+    heartbeat_events = 0
     connection_events = 0
     metadata_fetch_failed = False
 
@@ -88,7 +90,9 @@ def inspect_recording(paths: Iterable[str | Path], *, strict: bool = False) -> R
                 if room_name:
                     rooms[room_name] += 1
                 if event_type == "dry_run_heartbeat":
-                    connection_events += 1
+                    heartbeat_events += 1
+                    if _is_connection_heartbeat(payload):
+                        connection_events += 1
                 if isinstance(payload, dict):
                     if "reconnects" in payload:
                         reconnect_count = max(reconnect_count, int(payload.get("reconnects") or 0))
@@ -158,6 +162,7 @@ def inspect_recording(paths: Iterable[str | Path], *, strict: bool = False) -> R
         ticker_count=ticker_count,
         transaction_count=transaction_count,
         reconnect_count=reconnect_count,
+        heartbeat_events=heartbeat_events,
         connection_events=connection_events,
         first_event_ts=first_event_ts,
         last_event_ts=final_event_ts,
@@ -197,3 +202,12 @@ def _room_name(payload: object, raw_payload: object) -> str | None:
         if room_name:
             return str(room_name)
     return None
+
+
+def _is_connection_heartbeat(payload: object) -> bool:
+    if not isinstance(payload, dict):
+        return True
+    heartbeat_type = payload.get("heartbeat_type")
+    if heartbeat_type is None:
+        return True
+    return heartbeat_type in {"connect", "disconnect"}

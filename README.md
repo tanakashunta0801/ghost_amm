@@ -44,10 +44,11 @@ uv run --with "python-socketio[client]>=5" --with aiohttp ghost-amm record-bitba
   --rotate-every-bytes 104857600 `
   --flush-every-events 1 `
   --max-reconnects 100 `
+  --heartbeat-interval-sec 60 `
   --prevent-sleep
 ```
 
-On Windows, `--prevent-sleep` requests the OS to keep the system awake for the recording process. It cannot protect against lid-close sleep policy, power loss, shutdown, or network loss.
+On Windows, `--prevent-sleep` requests the OS to keep the system awake for the recording process. It cannot protect against lid-close sleep policy, power loss, shutdown, or network loss. Periodic `dry_run_heartbeat` events make long recordings easier to inspect for stalls.
 
 Inspect the recording before replay:
 
