@@ -10,6 +10,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "venue": "synthetic_bitbank",
     "market_type": "spot",
     "pair": "btc_jpy",
+    "replay": {
+        "order": "arrival_order",
+        "strict_sequence": True,
+        "allow_exchange_time_sort": False,
+    },
     "bitbank": {
         "public_ws_url": "wss://stream.bitbank.cc/socket.io/?EIO=4&transport=websocket",
         "public_rest_url": "https://public.bitbank.cc",
@@ -135,7 +140,7 @@ def load_config(path: str | Path | None = None) -> Config:
         return Config()
     config_path = Path(path)
     if not config_path.exists():
-        return Config()
+        raise FileNotFoundError(f"Config file not found: {config_path}")
     text = config_path.read_text(encoding="utf-8")
     parsed = parse_yaml(text)
     return Config(parsed)

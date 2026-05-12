@@ -4,19 +4,21 @@ import csv
 import json
 from dataclasses import asdict
 from pathlib import Path
+from typing import Any
 
 from ghost_amm.analytics.metrics import MetricsSummary
 from ghost_amm.events import Event, write_jsonl
 
 
-def write_report(out_dir: str | Path, events: list[Event], summary: MetricsSummary) -> None:
+def write_report(out_dir: str | Path, events: list[Event], summary: MetricsSummary, *, metadata: dict[str, Any] | None = None) -> None:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    summary_data = asdict(summary) | (metadata or {})
     write_jsonl(out / "events.jsonl", events)
     with (out / "summary.json").open("w", encoding="utf-8") as fh:
-        json.dump(asdict(summary), fh, ensure_ascii=False, indent=2, sort_keys=True)
+        json.dump(summary_data, fh, ensure_ascii=False, indent=2, sort_keys=True)
     _write_fills_csv(out / "fills.csv", events)
-    (out / "report.md").write_text(_render_markdown(summary), encoding="utf-8")
+    (out / "report.md").write_text(_render_markdown(summary_data), encoding="utf-8")
 
 
 def _write_fills_csv(path: Path, events: list[Event]) -> None:
@@ -41,14 +43,14 @@ def _write_fills_csv(path: Path, events: list[Event]) -> None:
             writer.writerow({field: fill.payload.get(field) for field in fields})
 
 
-def _render_markdown(summary: MetricsSummary) -> str:
+def _render_markdown(summary_data: dict[str, Any]) -> str:
     lines = [
         "# Ghost AMM Replay Report",
         "",
         "| Metric | Value |",
         "|---|---:|",
     ]
-    for key, value in asdict(summary).items():
+    for key, value in summary_data.items():
         lines.append(f"| {key} | {value} |")
     lines.extend(
         [

@@ -60,28 +60,46 @@ class ConservativeQueueFillModel:
             return []
         trade_side = str(event.payload["side"])
         trade_price = float(event.payload["price"])
-        trade_amount = float(event.payload["amount"])
+        remaining_trade_amount = float(event.payload["amount"])
         fills: list[Event] = []
-        for order in list(self.orders.values()):
-            if event.ts_exchange - order.created_at < self.min_resting_time_ms:
-                continue
-            if order.side == "buy" and trade_side == "sell" and trade_price <= order.price:
-                fills.extend(self._consume(order, trade_amount, event, fair_state))
-            elif order.side == "sell" and trade_side == "buy" and trade_price >= order.price:
-                fills.extend(self._consume(order, trade_amount, event, fair_state))
+        for order in self._eligible_orders(trade_side, trade_price, event.ts_exchange):
+            if remaining_trade_amount <= 0:
+                break
+            order_fills, remaining_trade_amount = self._consume(order, remaining_trade_amount, event, fair_state)
+            fills.extend(order_fills)
         return fills
 
-    def _consume(self, order: TrackedOrder, trade_amount: float, event: Event, fair_state: FairPriceState) -> list[Event]:
+    def _eligible_orders(self, trade_side: str, trade_price: float, now_ms: float) -> list[TrackedOrder]:
+        eligible: list[TrackedOrder] = []
+        for order in self.orders.values():
+            if now_ms - order.created_at < self.min_resting_time_ms:
+                continue
+            if order.side == "buy" and trade_side == "sell" and trade_price <= order.price:
+                eligible.append(order)
+            elif order.side == "sell" and trade_side == "buy" and trade_price >= order.price:
+                eligible.append(order)
+        if trade_side == "sell":
+            return sorted(eligible, key=lambda order: (-order.price, order.created_at, order.order_id))
+        return sorted(eligible, key=lambda order: (order.price, order.created_at, order.order_id))
+
+    def _consume(
+        self,
+        order: TrackedOrder,
+        trade_amount: float,
+        event: Event,
+        fair_state: FairPriceState,
+    ) -> tuple[list[Event], float]:
         remaining_flow = trade_amount
         if order.queue_ahead > 0:
             reduction = min(order.queue_ahead, remaining_flow)
             order.queue_ahead -= reduction
             remaining_flow -= reduction
         if order.queue_ahead > 0 or remaining_flow <= 0:
-            return []
+            return [], remaining_flow
         fill_size = min(order.remaining_size, remaining_flow)
         if fill_size <= 0:
-            return []
+            return [], remaining_flow
+        remaining_flow -= fill_size
         order.remaining_size -= fill_size
         fee = order.price * fill_size * self.maker_fee_bps / 10_000
         self.counter += 1
@@ -108,4 +126,4 @@ class ConservativeQueueFillModel:
         )
         if order.remaining_size <= 1e-12:
             self.orders.pop(order.order_id, None)
-        return [fill]
+        return [fill], remaining_flow

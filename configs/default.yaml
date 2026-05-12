@@ -3,6 +3,11 @@ venue: synthetic_bitbank
 market_type: spot
 pair: btc_jpy
 
+replay:
+  order: arrival_order
+  strict_sequence: true
+  allow_exchange_time_sort: false
+
 bitbank:
   public_ws_url: "wss://stream.bitbank.cc/socket.io/?EIO=4&transport=websocket"
   public_rest_url: "https://public.bitbank.cc"

@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import sys
 from dataclasses import asdict
+from pathlib import Path
 
 from ghost_amm.analytics.metrics import summarize
 from ghost_amm.analytics.report import write_report
@@ -34,6 +36,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--events", required=True, nargs="+")
     p.add_argument("--config", default="configs/default.yaml")
     p.add_argument("--out", required=True)
+    p.add_argument("--replay-order", choices=["arrival_order", "exchange_time_sort"], default=None)
+    p.add_argument("--strict-sequence", action=argparse.BooleanOptionalAction, default=None)
 
     p = sub.add_parser("report")
     p.add_argument("--replay", required=True)
@@ -99,6 +103,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", required=True)
 
     args = parser.parse_args(argv)
+    config_path = getattr(args, "config", None)
+    if config_path is not None and not Path(config_path).exists():
+        print(json.dumps({"ok": False, "error": "config_not_found", "path": str(config_path)}, sort_keys=True), file=sys.stderr)
+        return 1
 
     if args.command == "generate-synthetic":
         events = generate_synthetic_events(args.scenario, args.venue, args.pair)
@@ -109,10 +117,23 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "replay":
         config = load_config(args.config)
         engine = ReplayEngine(config)
-        output = engine.run_files(args.events, args.out)
+        output = engine.run_files(args.events, args.out, replay_order=args.replay_order, strict_sequence=args.strict_sequence)
         fills = sum(1 for event in output if event.event_type == "virtual_fill")
         orders = sum(1 for event in output if event.event_type == "virtual_order_placed")
-        print(json.dumps({"events": len(output), "source_files": len(args.events), "virtual_orders": orders, "virtual_fills": fills, "out": args.out}, sort_keys=True))
+        print(
+            json.dumps(
+                {
+                    "events": len(output),
+                    "source_files": len(args.events),
+                    "virtual_orders": orders,
+                    "virtual_fills": fills,
+                    "replay_order": engine.last_replay_order,
+                    "strict_sequence": engine.last_strict_sequence,
+                    "out": args.out,
+                },
+                sort_keys=True,
+            )
+        )
         return 0
 
     if args.command == "report":
