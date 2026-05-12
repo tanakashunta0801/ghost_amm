@@ -54,8 +54,8 @@ uv run --extra test pytest -q
 - Active 24h public recording is running locally for `btc_jpy`.
 - Recording output: `data/raw/bitbank_btc_jpy_24h_20260512_234537.jsonl`.
 - Started: 2026-05-12 23:45:37 JST. Expected completion: around 2026-05-13 23:45 JST.
-- Last checked: 2026-05-13 00:35 JST, duration 0.84h, 23.3MB, strict recording status `ok=true`, stale `false`, sequence violations 0.
-- Completion watcher is running locally and should run `run-public-data-gate` after the 24h recorder exits.
+- Last checked: 2026-05-13 00:53 JST, duration 1.12h, 31.1MB, strict recording status `ok_for_replay=true`, stale `false`, sequence violations 0, duration gate `1.12<24h`.
+- Completion watcher v3 is running locally and should run `run-public-data-gate --prevent-sleep` after the 24h recorder exits.
 - Expected gate output: `data/reports/bitbank_btc_jpy_24h_gate_20260512_234537`.
 - No remaining code-only TODO is currently in progress; the active gate is real public data collection and validation.
 
