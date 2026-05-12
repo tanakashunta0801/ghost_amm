@@ -28,6 +28,7 @@ class RiskKernel:
         self.risk_cfg = risk_cfg
         self.shock_cfg = shock_cfg
         self.amm_cfg = amm_cfg
+        self.fair_history: deque[tuple[float, float]] = deque()
         self.fill_history: deque[tuple[float, str]] = deque()
         self.inventory_change_history: deque[tuple[float, str, float]] = deque()
         self.fill_burst_cooldown_until: dict[str, float] = {}
@@ -91,12 +92,16 @@ class RiskKernel:
             return RiskDecision(False, False, False, 0.0, book.stale_reason or "book_stale")
         allow_buy = not (pair_spec and pair_spec.stop_buy_order)
         allow_sell = not (pair_spec and pair_spec.stop_sell_order)
+        fair_drift_blocks = self._fair_drift_blocked_sides(now_ms, fair_state.fair)
+        self._record_fair(now_ms, fair_state.fair)
         fill_burst_blocked = self._fill_burst_blocked_sides(now_ms)
         if "buy" in fill_burst_blocked:
             allow_buy = False
         if "sell" in fill_burst_blocked:
             allow_sell = False
         side_block_reasons = {side: "fill_burst_cooldown" for side in fill_burst_blocked}
+        for side in fair_drift_blocks:
+            side_block_reasons.setdefault(side, "fair_drift_too_large")
         inventory_blocks = self._inventory_blocked_sides(inventory, fair_state.fair, max_size, now_ms)
         for side, reason in inventory_blocks.items():
             side_block_reasons.setdefault(side, reason)
@@ -112,6 +117,37 @@ class RiskKernel:
     def _expire_fill_history(self, now_ms: float, window_ms: float) -> None:
         while self.fill_history and now_ms - self.fill_history[0][0] > window_ms:
             self.fill_history.popleft()
+
+    def _record_fair(self, now_ms: float, fair: float) -> None:
+        self.fair_history.append((now_ms, fair))
+        while self.fair_history and now_ms - self.fair_history[0][0] > 5_000:
+            self.fair_history.popleft()
+
+    def _fair_drift_blocked_sides(self, now_ms: float, fair: float) -> list[str]:
+        blocked: list[str] = []
+        checks = [
+            (1_000, float(self.risk_cfg.get("max_fair_drop_bps_1s_for_bid", 0) or 0), float(self.risk_cfg.get("max_fair_rise_bps_1s_for_ask", 0) or 0)),
+            (5_000, float(self.risk_cfg.get("max_fair_drop_bps_5s_for_bid", 0) or 0), float(self.risk_cfg.get("max_fair_rise_bps_5s_for_ask", 0) or 0)),
+        ]
+        for horizon_ms, max_drop_bps, max_rise_bps in checks:
+            prior = self._fair_at_or_before(now_ms - horizon_ms)
+            if prior is None or prior <= 0:
+                continue
+            change_bps = (fair - prior) / prior * 10_000
+            if max_drop_bps > 0 and change_bps <= -max_drop_bps and "buy" not in blocked:
+                blocked.append("buy")
+            if max_rise_bps > 0 and change_bps >= max_rise_bps and "sell" not in blocked:
+                blocked.append("sell")
+        return blocked
+
+    def _fair_at_or_before(self, target_ms: float) -> float | None:
+        value: float | None = None
+        for ts_ms, fair in self.fair_history:
+            if ts_ms <= target_ms:
+                value = fair
+            else:
+                break
+        return value
 
     def _fill_burst_blocked_sides(self, now_ms: float) -> list[str]:
         blocked: list[str] = []

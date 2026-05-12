@@ -1,6 +1,6 @@
 from ghost_amm.amm.inventory import InventoryState
 from ghost_amm.exchange.bitbank_rules import BitbankStatus, fallback_btc_jpy_spec
-from ghost_amm.market.fair_price import FairPriceEngine
+from ghost_amm.market.fair_price import FairPriceEngine, FairPriceState
 from ghost_amm.market.orderbook import OrderBook
 from ghost_amm.market.shock import ShockState
 from ghost_amm.risk.kernel import RiskKernel
@@ -227,3 +227,81 @@ def test_one_side_inventory_change_per_minute_blocks_and_expires() -> None:
     )
     assert expired.allow_buy
     assert expired.allow_sell
+
+
+def test_fair_drop_blocks_bid_side() -> None:
+    book = OrderBook("bitbank", "BTC/JPY")
+    book.apply_snapshot({"bids": [["99", "100000"]], "asks": [["101", "100000"]]}, 1, 1)
+    risk = RiskKernel(
+        market_cfg={"max_spread_bps": 500, "min_depth_20bps_jpy": 0},
+        risk_cfg={"block_on_pair_stop_flags": True, "max_abs_skew": 10, "max_fair_drop_bps_1s_for_bid": 30},
+        shock_cfg={"min_activation_to_quote": 0.1},
+        amm_cfg={"max_order_size": 1},
+    )
+    base_args = {
+        "book": book,
+        "shock_state": ShockState(1, 1, 0, 0, 1, 1, None),
+        "inventory": InventoryState(10, 10_000),
+        "pair_spec": fallback_btc_jpy_spec(),
+        "status": BitbankStatus("btc_jpy", "NORMAL", 0.0001),
+    }
+    risk.evaluate(fair_state=FairPriceState(100, 1, 10, True), now_ms=0, **base_args)
+
+    decision = risk.evaluate(fair_state=FairPriceState(95, 1, 10, True), now_ms=1000, **base_args)
+
+    assert decision.allow_quote
+    assert not decision.allow_buy
+    assert decision.allow_sell
+    assert decision.reason == "fair_drift_too_large"
+    assert decision.side_block_reasons["buy"] == "fair_drift_too_large"
+
+
+def test_fair_rise_blocks_ask_side() -> None:
+    book = OrderBook("bitbank", "BTC/JPY")
+    book.apply_snapshot({"bids": [["99", "100000"]], "asks": [["101", "100000"]]}, 1, 1)
+    risk = RiskKernel(
+        market_cfg={"max_spread_bps": 500, "min_depth_20bps_jpy": 0},
+        risk_cfg={"block_on_pair_stop_flags": True, "max_abs_skew": 10, "max_fair_rise_bps_1s_for_ask": 30},
+        shock_cfg={"min_activation_to_quote": 0.1},
+        amm_cfg={"max_order_size": 1},
+    )
+    base_args = {
+        "book": book,
+        "shock_state": ShockState(1, 1, 0, 0, 1, 1, None),
+        "inventory": InventoryState(10, 10_000),
+        "pair_spec": fallback_btc_jpy_spec(),
+        "status": BitbankStatus("btc_jpy", "NORMAL", 0.0001),
+    }
+    risk.evaluate(fair_state=FairPriceState(100, 1, 10, True), now_ms=0, **base_args)
+
+    decision = risk.evaluate(fair_state=FairPriceState(105, 1, 10, True), now_ms=1000, **base_args)
+
+    assert decision.allow_quote
+    assert decision.allow_buy
+    assert not decision.allow_sell
+    assert decision.side_block_reasons["sell"] == "fair_drift_too_large"
+
+
+def test_fair_drift_5s_window_blocks_bid_side() -> None:
+    book = OrderBook("bitbank", "BTC/JPY")
+    book.apply_snapshot({"bids": [["99", "100000"]], "asks": [["101", "100000"]]}, 1, 1)
+    risk = RiskKernel(
+        market_cfg={"max_spread_bps": 500, "min_depth_20bps_jpy": 0},
+        risk_cfg={"block_on_pair_stop_flags": True, "max_abs_skew": 10, "max_fair_drop_bps_5s_for_bid": 30},
+        shock_cfg={"min_activation_to_quote": 0.1},
+        amm_cfg={"max_order_size": 1},
+    )
+    base_args = {
+        "book": book,
+        "shock_state": ShockState(1, 1, 0, 0, 1, 1, None),
+        "inventory": InventoryState(10, 10_000),
+        "pair_spec": fallback_btc_jpy_spec(),
+        "status": BitbankStatus("btc_jpy", "NORMAL", 0.0001),
+    }
+    risk.evaluate(fair_state=FairPriceState(100, 1, 10, True), now_ms=0, **base_args)
+
+    decision = risk.evaluate(fair_state=FairPriceState(95, 1, 10, True), now_ms=5000, **base_args)
+
+    assert not decision.allow_buy
+    assert decision.allow_sell
+    assert decision.side_block_reasons["buy"] == "fair_drift_too_large"

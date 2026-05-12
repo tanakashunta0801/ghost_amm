@@ -124,6 +124,10 @@ risk:
   max_quote_usage_jpy: 0
   max_inventory_notional_jpy: 0
   max_one_side_inventory_change_jpy_per_minute: 0
+  max_fair_drop_bps_1s_for_bid: 0
+  max_fair_rise_bps_1s_for_ask: 0
+  max_fair_drop_bps_5s_for_bid: 0
+  max_fair_rise_bps_5s_for_ask: 0
   block_on_sequence_ordering_violation: true
   block_on_bitbank_status_not_normal: true
   block_on_pair_stop_flags: true
