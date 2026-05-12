@@ -27,6 +27,8 @@ uv run --extra full ghost-amm dry-run-bitbank-public `
   --max-events 500
 ```
 
+The dry-run output directory includes replay-shaped `summary.json`, `report.md`, `fills.csv`, `risk_diagnostics.md`, and `recording_inspection.json`. Use `source_events.jsonl` as the input when replaying the observed public stream.
+
 ## Recording Real Public Data
 
 Use `record-bitbank-public` before real-data replay. It writes metadata first, flushes each JSONL event, reconnects on stream failures, and can rotate files for long runs.

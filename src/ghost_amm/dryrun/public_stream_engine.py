@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 from typing import Iterable
 from urllib.parse import urlparse
 
+from ghost_amm.analytics.metrics import summarize
+from ghost_amm.analytics.report import write_report
+from ghost_amm.analytics.risk_diagnostics import analyze_risk_blocks, write_risk_diagnostics
 from ghost_amm.config import Config
 from ghost_amm.events import Event, make_event, now_ms, write_jsonl
 from ghost_amm.exchange.bitbank_public import BitbankPublicClient, pair_spec_event, status_event
 from ghost_amm.pipeline import GhostAmmPipeline
 from ghost_amm.recorder.bitbank_normalizer import normalize_bitbank_message
+from ghost_amm.recorder.inspection import inspect_recording
 
 
 class PublicStreamDryRunEngine:
@@ -31,6 +36,7 @@ class PublicStreamDryRunEngine:
         self.timeout_sec = timeout_sec
         self.pipeline = GhostAmmPipeline(config)
         self.events: list[Event] = []
+        self.source_events: list[Event] = []
 
     async def run(self) -> list[Event]:
         try:
@@ -54,6 +60,7 @@ class PublicStreamDryRunEngine:
                 return
             room_name = str(data.get("room_name") or data.get("room") or "")
             for event in normalize_bitbank_message(room_name, data):
+                self.source_events.append(event)
                 self.events.append(event)
                 self.events.extend(self.pipeline.process(event))
             if self.max_events is not None and len(self.events) >= self.max_events:
@@ -85,8 +92,7 @@ class PublicStreamDryRunEngine:
             )
         finally:
             await sio.disconnect()
-        self.out.mkdir(parents=True, exist_ok=True)
-        write_jsonl(self.out / "events.jsonl", self.events)
+        self._write_outputs()
         return self.events
 
     def _prime_metadata(self) -> None:
@@ -114,13 +120,40 @@ class PublicStreamDryRunEngine:
         for spec in specs:
             if spec.name == self.pair:
                 event = pair_spec_event(spec, ts_ms=ts, symbol=symbol)
+                self.source_events.append(event)
                 self.events.append(event)
                 self.events.extend(self.pipeline.process(event))
         for status in statuses:
             if status.pair == self.pair:
                 event = status_event(status, ts_ms=ts + 1, symbol=symbol)
+                self.source_events.append(event)
                 self.events.append(event)
                 self.events.extend(self.pipeline.process(event))
+
+    def _write_outputs(self) -> None:
+        self.out.mkdir(parents=True, exist_ok=True)
+        source_path = self.out / "source_events.jsonl"
+        write_jsonl(source_path, self.source_events)
+        inv_cfg = self.config.section("inventory")
+        summary = summarize(
+            self.events,
+            initial_base=float(inv_cfg.get("initial_base_qty", 0.01)),
+            initial_quote=float(inv_cfg.get("initial_quote_qty", 150_000)),
+            last_fair=self.pipeline.last_fair.fair,
+        )
+        write_report(
+            self.out,
+            self.events,
+            summary,
+            metadata={"mode": "dry_run_public", "source_events": str(source_path.name)},
+        )
+        diagnostics = analyze_risk_blocks(self.events)
+        write_risk_diagnostics(self.out, diagnostics)
+        inspection = inspect_recording([source_path], strict=True)
+        (self.out / "recording_inspection.json").write_text(
+            json.dumps(inspection.to_dict(), ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
 
 
 def _socketio_base_url(url: str) -> str:
