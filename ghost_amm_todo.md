@@ -46,6 +46,7 @@ uv run --extra test pytest -q
 - Recording monitor: `recording-status` reports file freshness, strict inspection status, and stale recording failures.
 - Public data gate runner: `run-public-data-gate` inspects a recording once, replays multiple configs, writes per-config reports, and evaluates `quality_gate.json`.
 - CLI event inputs expand wildcards internally, so rotated JSONL sets like `data/raw/bitbank_btc_jpy_24h_*.jsonl` work in PowerShell.
+- Recording monitor supports `--min-duration-hours`, so 24h gate checks fail explicitly on partial recordings.
 
 ## In Progress
 
@@ -173,6 +174,8 @@ uv run ghost-amm validate-public-recording `
   --events data/raw/bitbank_btc_jpy_24h.jsonl `
   --config configs/default.yaml `
   --out data/reports/bitbank_btc_jpy_24h
+
+uv run ghost-amm recording-status data/raw/bitbank_btc_jpy_24h*.jsonl --strict --max-stale-sec 300 --min-duration-hours 24
 
 uv run ghost-amm evaluate-quality-gate `
   --summary data/reports/bitbank_btc_jpy_24h_config_a/summary.json data/reports/bitbank_btc_jpy_24h_config_b/summary.json `

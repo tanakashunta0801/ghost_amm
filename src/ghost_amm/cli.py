@@ -96,6 +96,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("events", nargs="+")
     p.add_argument("--strict", action="store_true")
     p.add_argument("--max-stale-sec", type=float, default=300.0)
+    p.add_argument("--min-duration-hours", type=float, default=None)
     p.add_argument("--no-inspect", action="store_true")
 
     p = sub.add_parser("validate-public-recording")
@@ -305,7 +306,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if result.ok_for_replay else 1
 
     if args.command == "recording-status":
-        result = recording_status(args.events, strict=args.strict, max_stale_sec=args.max_stale_sec, inspect=not args.no_inspect)
+        result = recording_status(
+            args.events,
+            strict=args.strict,
+            max_stale_sec=args.max_stale_sec,
+            inspect=not args.no_inspect,
+            min_duration_hours=args.min_duration_hours,
+        )
         print(json.dumps(result.to_dict(), ensure_ascii=False, sort_keys=True))
         return 0 if result.ok else 1
 

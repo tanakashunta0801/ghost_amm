@@ -62,6 +62,12 @@ Check whether an in-progress recording is still updating and currently replayabl
 uv run ghost-amm recording-status data/raw/bitbank_btc_jpy_1h.jsonl --strict --max-stale-sec 300
 ```
 
+For a 24h gate, include the minimum duration so partial recordings fail explicitly:
+
+```powershell
+uv run ghost-amm recording-status data/raw/bitbank_btc_jpy_24h*.jsonl --strict --max-stale-sec 300 --min-duration-hours 24
+```
+
 For strict channel coverage, including observed ticker and trade events:
 
 ```powershell

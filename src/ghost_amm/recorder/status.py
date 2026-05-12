@@ -23,6 +23,9 @@ class RecordingStatus:
     stale: bool
     total_bytes: int
     latest_write_age_sec: float | None
+    min_duration_hours: float | None
+    duration_hours: float | None
+    duration_ok: bool | None
     files: list[RecordingFileStatus]
     inspection: dict[str, Any] | None
     reason: str | None
@@ -37,6 +40,7 @@ def recording_status(
     strict: bool = False,
     max_stale_sec: float = 300.0,
     inspect: bool = True,
+    min_duration_hours: float | None = None,
     now: float | None = None,
 ) -> RecordingStatus:
     now = time.time() if now is None else now
@@ -47,6 +51,8 @@ def recording_status(
     latest_age = min((item.last_write_age_sec for item in existing if item.last_write_age_sec is not None), default=None)
     stale = latest_age is None or latest_age > max_stale_sec
     inspection = None
+    duration_hours = None
+    duration_ok = None
     reason = None
     if missing:
         reason = "missing_files:" + ",".join(missing)
@@ -55,13 +61,24 @@ def recording_status(
     if inspect and not missing:
         result = inspect_recording([item.path for item in existing], strict=strict)
         inspection = result.to_dict()
+        duration_hours = result.duration_hours
+        if min_duration_hours is not None:
+            duration_ok = duration_hours >= min_duration_hours
         if not result.ok_for_replay and reason is None:
             reason = f"inspection_failed:{result.reason}"
+        elif min_duration_hours is not None and duration_hours < min_duration_hours and reason is None:
+            reason = f"recording_duration_below_min:{duration_hours}<{min_duration_hours}"
+    elif min_duration_hours is not None and reason is None:
+        duration_ok = False
+        reason = "inspection_required_for_min_duration"
     return RecordingStatus(
         ok=reason is None,
         stale=stale,
         total_bytes=total_bytes,
         latest_write_age_sec=latest_age,
+        min_duration_hours=min_duration_hours,
+        duration_hours=duration_hours,
+        duration_ok=duration_ok,
         files=file_statuses,
         inspection=inspection,
         reason=reason,
