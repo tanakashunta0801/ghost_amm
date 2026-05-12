@@ -87,6 +87,29 @@ Interpretation:
 - It does not prove profitability.
 - Pre-live quality gate remains failed until a 24h recording passes strict validation and multiple replay configs show stable positive alpha with enough fills.
 
+Additional smoke check on 2026-05-13 with the active 24h recording at 0.78h:
+
+```powershell
+uv run ghost-amm run-public-data-gate `
+  --events data/raw/bitbank_btc_jpy_24h_20260512_234537*.jsonl `
+  --configs configs/default.yaml configs/diagnostic_relaxed_activation.yaml configs/diagnostic_controlled_churn.yaml `
+  --out data/reports/bitbank_btc_jpy_24h_gate_smoke_20260513_0030
+```
+
+Result:
+
+- strict inspection passed on the partial recording: 21,566 source events, 0 sequence violations, duration 0.78h.
+- `configs/default.yaml`: 0 virtual orders, 0 fills, `strategy_alpha_pnl=0.0`.
+- `configs/diagnostic_relaxed_activation.yaml`: 6,137 virtual orders, 0 fills, very high churn at 130.8 orders/min and 130.8 cancels/min.
+- `configs/diagnostic_controlled_churn.yaml`: 158 virtual orders, 2 fills, `strategy_alpha_pnl=+5.051`, `fill_rate=0.01266`, `orders_per_minute=3.36`, `cancels_per_minute=3.34`.
+- `quality_gate.json` failed as expected: duration below 24h, too few fills, default/relaxed alpha not positive, relaxed churn too high.
+
+Interpretation:
+
+- The new one-shot gate command works on real public JSONL and PowerShell wildcard input.
+- The partial positive alpha on 2 fills is not evidence of profitability.
+- The 24h gate remains open until the full recording completes and enough fills are observed across multiple configs.
+
 ## Do Not Do Yet
 
 - Do not create a real live order submission path in this MVP.
