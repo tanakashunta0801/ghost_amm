@@ -8,6 +8,8 @@ from ghost_amm.amm.quote_surface import QuoteSurface
 from ghost_amm.config import Config
 from ghost_amm.events import Event, make_event
 from ghost_amm.exchange.bitbank_rules import BitbankPairSpec, BitbankStatus
+from ghost_amm.execution.live_gates import LiveGateResult, evaluate_live_order_gates, live_order_blocked_event
+from ghost_amm.execution.order_state import OrderIntent
 from ghost_amm.market.fair_price import FairPriceEngine, FairPriceState
 from ghost_amm.market.orderbook import OrderBook
 from ghost_amm.market.shock import ShockActivator, ShockState
@@ -174,6 +176,7 @@ class GhostAmmPipeline:
         for out in projector_events:
             if out.event_type == "virtual_order_placed":
                 self.fill_model.on_virtual_order(out, self.book)
+                emitted.extend(self._live_order_observation_events(out, risk_decision))
             elif out.event_type == "virtual_order_canceled":
                 self.fill_model.on_cancel(out)
         return emitted
@@ -186,6 +189,48 @@ class GhostAmmPipeline:
         elif event.event_type == "bitbank_status":
             if "status" in event.payload and "min_amount" in event.payload:
                 self.status = BitbankStatus.from_api(event.payload)
+
+    def _live_order_observation_events(self, virtual_order: Event, risk_decision: RiskDecision) -> list[Event]:
+        payload = virtual_order.payload
+        intent = OrderIntent(
+            venue=virtual_order.venue,
+            pair=str(self.config.get("pair", "btc_jpy")),
+            symbol=virtual_order.symbol,
+            side=str(payload["side"]),
+            price=float(payload["price"]),
+            amount=float(payload["size"]),
+            order_type="limit",
+            post_only=bool(payload.get("post_only", True)),
+            client_order_id=str(payload["order_id"]),
+        )
+        intent_event = make_event(
+            "live_order_intent",
+            ts_exchange=virtual_order.ts_exchange,
+            venue=intent.venue,
+            symbol=intent.symbol,
+            payload={
+                "pair": intent.pair,
+                "side": intent.side,
+                "price": intent.price,
+                "amount": intent.amount,
+                "order_type": intent.order_type,
+                "post_only": intent.post_only,
+                "client_order_id": intent.client_order_id,
+                "source_event_id": virtual_order.event_id,
+            },
+        )
+        result = evaluate_live_order_gates(
+            config=self.config,
+            intent=intent,
+            pair_spec=self.pair_spec,
+            status=self.status,
+            book=self.book,
+            risk=risk_decision,
+            clock_drift_ms=0,
+        )
+        if result.allowed:
+            result = LiveGateResult(False, "mvp_live_submission_disabled")
+        return [intent_event, live_order_blocked_event(intent, result, virtual_order.ts_exchange)]
 
 
 def _maker_fee_bps_from_pair_spec(pair_spec: BitbankPairSpec, fee_cfg: dict) -> float:

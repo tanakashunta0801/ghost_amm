@@ -13,3 +13,4 @@ class OrderIntent:
     amount: float
     order_type: str = "limit"
     post_only: bool = True
+    client_order_id: str | None = None

@@ -87,6 +87,7 @@ def live_order_blocked_event(intent: OrderIntent, result: LiveGateResult, ts_ms:
             "amount": intent.amount,
             "order_type": intent.order_type,
             "post_only": intent.post_only,
+            "client_order_id": intent.client_order_id,
             "reason": result.reason,
         },
     )
