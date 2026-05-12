@@ -30,10 +30,7 @@ class GhostAmmPipeline:
             negative_balances_allowed=bool(inv_cfg.get("negative_balances_allowed", False)),
         )
         self.book = OrderBook(venue=venue, symbol=symbol)
-        self.fair_engine = FairPriceEngine(
-            max_spread_bps=float(config.get("market.max_spread_bps", 50)),
-            stale_after_ms=float(config.get("market.stale_after_ms", 3000)),
-        )
+        self.fair_engine = FairPriceEngine.from_config(market_cfg=config.section("market"), fair_cfg=config.section("fair"))
         risk_cfg = dict(config.section("risk"))
         risk_cfg["max_abs_skew"] = inv_cfg.get("max_abs_skew", 10)
         self.risk = RiskKernel(
@@ -63,7 +60,7 @@ class GhostAmmPipeline:
         if event.event_type in {"order_book_snapshot", "order_book_delta"}:
             self.book.apply_event(event)
 
-        fair_state = self.fair_engine.from_orderbook(self.book, event.ts_exchange)
+        fair_state = self.fair_engine.from_market_event(self.book, event, event.ts_exchange)
         self.last_fair = fair_state
         if fair_state.fair is not None:
             emitted.append(
@@ -124,6 +121,9 @@ class GhostAmmPipeline:
                     "fair": fair_state.fair,
                     "fair_is_valid": fair_state.is_valid,
                     "fair_reason": fair_state.reason,
+                    "fair_sources": fair_state.sources,
+                    "fair_source_count": fair_state.source_count,
+                    "fair_deviation_bps": fair_state.deviation_bps,
                     "spread_bps": fair_state.spread_bps,
                     "book_spread_bps": self.book.spread_bps(),
                     "book_depth_20bps": self.book.depth_around_mid(20),

@@ -59,6 +59,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "min_depth_20bps_jpy": 5_000_000,
         "reject_circuit_break_book": True,
     },
+    "fair": {
+        "min_source_count": 1,
+        "max_source_age_ms": 3000,
+        "max_source_deviation_bps": 80,
+        "use_median": True,
+    },
     "inventory": {
         "initial_base_qty": 0.01,
         "initial_quote_qty": 150_000,
