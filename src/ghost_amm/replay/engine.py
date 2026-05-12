@@ -23,7 +23,12 @@ class ReplayEngine:
         return enrich_fair_after(output)
 
     def run_file(self, events_path: str | Path, out_dir: str | Path) -> list[Event]:
-        events = read_jsonl(events_path)
+        return self.run_files([events_path], out_dir)
+
+    def run_files(self, event_paths: list[str | Path], out_dir: str | Path) -> list[Event]:
+        events: list[Event] = []
+        for path in event_paths:
+            events.extend(read_jsonl(path))
         output = self.run(events)
         inv_cfg = self.config.section("inventory")
         last_fair = self.pipeline.last_fair.fair

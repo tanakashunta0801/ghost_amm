@@ -7,3 +7,4 @@ __pycache__/
 .mypy_cache/
 data/raw/bitbank_btc_jpy_*.jsonl
 data/reports/bitbank_btc_jpy_*/
+data/logs/

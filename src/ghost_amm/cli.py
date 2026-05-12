@@ -29,7 +29,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", required=True)
 
     p = sub.add_parser("replay")
-    p.add_argument("--events", required=True)
+    p.add_argument("--events", required=True, nargs="+")
     p.add_argument("--config", default="configs/default.yaml")
     p.add_argument("--out", required=True)
 
@@ -84,10 +84,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "replay":
         config = load_config(args.config)
         engine = ReplayEngine(config)
-        output = engine.run_file(args.events, args.out)
+        output = engine.run_files(args.events, args.out)
         fills = sum(1 for event in output if event.event_type == "virtual_fill")
         orders = sum(1 for event in output if event.event_type == "virtual_order_placed")
-        print(json.dumps({"events": len(output), "virtual_orders": orders, "virtual_fills": fills, "out": args.out}, sort_keys=True))
+        print(json.dumps({"events": len(output), "source_files": len(args.events), "virtual_orders": orders, "virtual_fills": fills, "out": args.out}, sort_keys=True))
         return 0
 
     if args.command == "report":
