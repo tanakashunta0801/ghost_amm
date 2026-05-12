@@ -54,6 +54,31 @@ uv run --extra test pytest -q
 - Record and inspect a longer 1-week public dataset.
 - Use the real-data reports to decide whether the strategy has positive enough quality to justify any future live-order work.
 
+## Latest Real-Data Check
+
+Checked on 2026-05-12 with the existing 12h recording:
+
+```powershell
+uv run ghost-amm validate-public-recording `
+  --events data/raw/bitbank_btc_jpy_12h_20260511_233819.jsonl data/raw/bitbank_btc_jpy_12h_20260511_233819_0001.jsonl `
+  --config configs/default.yaml `
+  --out data/reports/bitbank_btc_jpy_12h_validation
+```
+
+Result:
+
+- strict inspection passed: 163,422 source events, no sequence violations, metadata present, ticker/trade/depth coverage present.
+- default config produced 0 virtual orders and 0 fills because `activation_too_low` dominated all risk blocks.
+- `configs/diagnostic_relaxed_activation.yaml` produced 22,157 virtual orders but 0 fills, with very high quote churn.
+- `configs/diagnostic_controlled_churn.yaml` produced 888 virtual orders and 1 fill.
+- controlled churn summary: `strategy_alpha_pnl=-4.82625`, `fill_rate=0.001126`, `orders_per_minute=2.499`, `cancels_per_minute=2.496`.
+
+Interpretation:
+
+- The 12h data proves the recorder and replay path work on real public data.
+- It does not prove profitability.
+- Pre-live quality gate remains failed until a 24h recording passes strict validation and multiple replay configs show stable positive alpha with enough fills.
+
 ## Do Not Do Yet
 
 - Do not create a real live order submission path in this MVP.
