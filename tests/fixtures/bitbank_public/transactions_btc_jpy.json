@@ -1,0 +1,23 @@
+{
+  "room_name": "transactions_btc_jpy",
+  "message": {
+    "data": {
+      "transactions": [
+        {
+          "transaction_id": 32059629801,
+          "side": "buy",
+          "price": "12669111",
+          "amount": "0.0123",
+          "executed_at": 1778509981000
+        },
+        {
+          "transaction_id": 32059629802,
+          "side": "sell",
+          "price": "12669110",
+          "amount": "0.0045",
+          "executed_at": 1778509981100
+        }
+      ]
+    }
+  }
+}
