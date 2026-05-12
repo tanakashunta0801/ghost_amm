@@ -8,6 +8,7 @@ from dataclasses import asdict
 from ghost_amm.analytics.metrics import summarize
 from ghost_amm.analytics.report import write_report
 from ghost_amm.analytics.risk_diagnostics import analyze_risk_blocks, write_risk_diagnostics
+from ghost_amm.analytics.sweep import run_activation_sweep
 from ghost_amm.config import Config, load_config
 from ghost_amm.dryrun.public_stream_engine import PublicStreamDryRunEngine
 from ghost_amm.events import read_jsonl, write_jsonl
@@ -76,6 +77,13 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("analyze-risk-blocks")
     p.add_argument("--events", required=True, nargs="+")
+    p.add_argument("--out", required=True)
+
+    p = sub.add_parser("sweep-activation")
+    p.add_argument("--events", required=True, nargs="+")
+    p.add_argument("--config", default="configs/default.yaml")
+    p.add_argument("--thresholds", default="0.003,0.01,0.03,0.05")
+    p.add_argument("--min-activations", default="0.001,0.01,0.03")
     p.add_argument("--out", required=True)
 
     args = parser.parse_args(argv)
@@ -183,6 +191,20 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"json": str(json_path), "markdown": str(md_path), "blocked_events": result.blocked_events}, sort_keys=True))
         return 0
 
+    if args.command == "sweep-activation":
+        events = []
+        for path in args.events:
+            events.extend(read_jsonl(path))
+        rows = run_activation_sweep(
+            base_config=load_config(args.config),
+            events=events,
+            thresholds=_parse_float_list(args.thresholds),
+            min_activations=_parse_float_list(args.min_activations),
+            out_dir=args.out,
+        )
+        print(json.dumps({"rows": len(rows), "out": args.out, "best": rows[0] if rows else None}, sort_keys=True))
+        return 0
+
     return 1
 
 
@@ -201,6 +223,10 @@ def _compact(value: object) -> object:
     if isinstance(value, dict):
         return {key: value[key] for key in list(value)[:10]}
     return value
+
+
+def _parse_float_list(value: str) -> list[float]:
+    return [float(item.strip()) for item in value.split(",") if item.strip()]
 
 
 def _last_fair(events: list) -> float | None:
