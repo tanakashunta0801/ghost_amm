@@ -56,6 +56,12 @@ Inspect the recording before replay:
 uv run ghost-amm inspect-recording data/raw/bitbank_btc_jpy_1h.jsonl
 ```
 
+Check whether an in-progress recording is still updating and currently replayable:
+
+```powershell
+uv run ghost-amm recording-status data/raw/bitbank_btc_jpy_1h.jsonl --strict --max-stale-sec 300
+```
+
 For strict channel coverage, including observed ticker and trade events:
 
 ```powershell

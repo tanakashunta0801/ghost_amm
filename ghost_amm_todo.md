@@ -43,6 +43,7 @@ uv run --extra test pytest -q
 - Quality gate: `evaluate-quality-gate` fails closed unless inspection duration, fills, alpha, and churn thresholds pass across multiple reports.
 - Long recording support: `record-bitbank-public --prevent-sleep` keeps Windows awake during the recording process when the OS allows it.
 - Long recording observability: `record-bitbank-public --heartbeat-interval-sec` emits periodic heartbeat events for stall diagnostics.
+- Recording monitor: `recording-status` reports file freshness, strict inspection status, and stale recording failures.
 
 ## In Progress
 
@@ -110,6 +111,8 @@ uv run --with "python-socketio[client]>=5" --with aiohttp ghost-amm record-bitba
 Strict inspection:
 
 ```powershell
+uv run ghost-amm recording-status data/raw/bitbank_btc_jpy_10m.jsonl --strict --max-stale-sec 300
+
 uv run ghost-amm inspect-recording data/raw/bitbank_btc_jpy_10m.jsonl --strict
 ```
 

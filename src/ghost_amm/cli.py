@@ -20,6 +20,7 @@ from ghost_amm.exchange.ccxt_gateway import CcxtGateway, CcxtGatewayBlocked, Ccx
 from ghost_amm.recorder.bitbank_public_recorder import BitbankPublicRecorder
 from ghost_amm.recorder.inspection import inspect_recording
 from ghost_amm.recorder.mock_recorder import generate_synthetic_events
+from ghost_amm.recorder.status import recording_status
 from ghost_amm.replay.engine import ReplayEngine
 from ghost_amm.system_sleep import SystemSleepPreventer
 
@@ -89,6 +90,12 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("inspect-recording")
     p.add_argument("events", nargs="+")
     p.add_argument("--strict", action="store_true")
+
+    p = sub.add_parser("recording-status")
+    p.add_argument("events", nargs="+")
+    p.add_argument("--strict", action="store_true")
+    p.add_argument("--max-stale-sec", type=float, default=300.0)
+    p.add_argument("--no-inspect", action="store_true")
 
     p = sub.add_parser("validate-public-recording")
     p.add_argument("--events", required=True, nargs="+")
@@ -278,6 +285,11 @@ def main(argv: list[str] | None = None) -> int:
         result = inspect_recording(args.events, strict=args.strict)
         print(json.dumps(result.to_dict(), ensure_ascii=False, sort_keys=True))
         return 0 if result.ok_for_replay else 1
+
+    if args.command == "recording-status":
+        result = recording_status(args.events, strict=args.strict, max_stale_sec=args.max_stale_sec, inspect=not args.no_inspect)
+        print(json.dumps(result.to_dict(), ensure_ascii=False, sort_keys=True))
+        return 0 if result.ok else 1
 
     if args.command == "validate-public-recording":
         config = load_config(args.config)
