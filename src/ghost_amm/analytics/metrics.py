@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 
 from ghost_amm.events import Event
@@ -31,6 +32,11 @@ class MetricsSummary:
     average_adverse_30s_sell: float | None
     worst_adverse_buy: float | None
     worst_adverse_sell: float | None
+    shock_event_fill_count: int
+    shock_fill_count_by_event: dict[str, int]
+    shock_direction_by_event: dict[str, str]
+    shock_total_spread_capture_by_event: dict[str, float]
+    shock_average_adverse_5s_by_event: dict[str, float | None]
     pnl_by_shock_event: float
     pnl_outside_shock_events: float
     max_inventory_skew: float | None
@@ -56,17 +62,32 @@ def summarize(events: list[Event], *, initial_base: float, initial_quote: float,
     }
     spread_capture: list[float] = []
     fill_values: list[float] = []
+    shock_fill_counts: Counter[str] = Counter()
+    shock_direction_by_event: dict[str, str] = {}
+    shock_spread_capture: defaultdict[str, float] = defaultdict(float)
+    shock_adverse_5s: defaultdict[str, list[float]] = defaultdict(list)
     for fill in fills:
         side = str(fill.payload["side"])
         price = float(fill.payload["fill_price"])
         size = float(fill.payload["fill_size"])
         fee = float(fill.payload.get("fee", 0))
+        shock_event_id = fill.payload.get("shock_event_id")
+        shock_id = str(shock_event_id) if shock_event_id else None
+        if shock_id is not None:
+            shock_fill_counts[shock_id] += 1
+            direction = fill.payload.get("shock_direction")
+            if direction:
+                shock_direction_by_event.setdefault(shock_id, str(direction))
         fair_at_fill = fill.payload.get("fair_at_fill")
+        spread_value: float | None = None
         if fair_at_fill:
             if side == "buy":
-                spread_capture.append(float(fair_at_fill) - price)
+                spread_value = float(fair_at_fill) - price
             else:
-                spread_capture.append(price - float(fair_at_fill))
+                spread_value = price - float(fair_at_fill)
+            spread_capture.append(spread_value)
+            if shock_id is not None:
+                shock_spread_capture[shock_id] += spread_value * size
         if side == "buy":
             base += size
             cash -= price * size + fee
@@ -87,6 +108,8 @@ def summarize(events: list[Event], *, initial_base: float, initial_quote: float,
             bucket.append(adverse)
             if side in adverse_by_side:
                 adverse_by_side[side][label].append(adverse)
+            if shock_id is not None and label == "5s":
+                shock_adverse_5s[shock_id].append(adverse)
         value = (last_fair or price) * base + cash
         fill_values.append(value)
 
@@ -128,6 +151,11 @@ def summarize(events: list[Event], *, initial_base: float, initial_quote: float,
         average_adverse_30s_sell=_avg(adverse_by_side["sell"]["30s"]),
         worst_adverse_buy=_min_nested(adverse_by_side["buy"].values()),
         worst_adverse_sell=_min_nested(adverse_by_side["sell"].values()),
+        shock_event_fill_count=sum(shock_fill_counts.values()),
+        shock_fill_count_by_event=dict(shock_fill_counts),
+        shock_direction_by_event=shock_direction_by_event,
+        shock_total_spread_capture_by_event=dict(shock_spread_capture),
+        shock_average_adverse_5s_by_event={shock_id: _avg(values) for shock_id, values in shock_adverse_5s.items()},
         pnl_by_shock_event=total_pnl if any(event.event_type == "forced_flow" for event in events) else 0.0,
         pnl_outside_shock_events=0.0 if any(event.event_type == "forced_flow" for event in events) else total_pnl,
         max_inventory_skew=max(skews_f) if skews_f else None,

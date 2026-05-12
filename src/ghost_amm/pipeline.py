@@ -124,6 +124,8 @@ class GhostAmmPipeline:
                     "direction": shock_state.direction,
                     "bid_activation": shock_state.bid_activation,
                     "ask_activation": shock_state.ask_activation,
+                    "shock_event_id": shock_state.last_shock_event_id,
+                    "shock_age_ms": shock_state.shock_age_ms,
                     "force_ratio": shock_state.force_ratio,
                     "recent_taker_buy_notional": shock_state.recent_taker_buy_notional,
                     "recent_taker_sell_notional": shock_state.recent_taker_sell_notional,
@@ -155,6 +157,9 @@ class GhostAmmPipeline:
                 activation=shock_state.activation,
                 bid_activation=shock_state.bid_activation,
                 ask_activation=shock_state.ask_activation,
+                shock_event_id=shock_state.last_shock_event_id,
+                shock_direction=shock_state.direction,
+                shock_age_ms=shock_state.shock_age_ms,
             )
 
         projector_events = self.projector.sync(

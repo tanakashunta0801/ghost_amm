@@ -20,6 +20,9 @@ class ActiveVirtualOrder:
     activation: float
     inventory_skew: float
     fair_price_at_creation: float
+    shock_event_id: str | None = None
+    shock_direction: str = "neutral"
+    shock_age_ms: float | None = None
 
 
 class OrderProjector:
@@ -81,6 +84,9 @@ class OrderProjector:
                 activation=quote.activation,
                 inventory_skew=quote.inventory_skew,
                 fair_price_at_creation=quote.fair,
+                shock_event_id=quote.shock_event_id,
+                shock_direction=quote.shock_direction,
+                shock_age_ms=quote.shock_age_ms,
             )
             self.active[key] = order
             events.append(
@@ -101,6 +107,9 @@ class OrderProjector:
                         "reason": "ghost_amm_quote",
                         "quote_level": order.level,
                         "activation": order.activation,
+                        "shock_event_id": order.shock_event_id,
+                        "shock_direction": order.shock_direction,
+                        "shock_age_ms": order.shock_age_ms,
                         "inventory_skew": order.inventory_skew,
                         "fair_price_at_creation": order.fair_price_at_creation,
                     },

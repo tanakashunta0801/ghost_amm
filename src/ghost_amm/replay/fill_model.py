@@ -17,6 +17,9 @@ class TrackedOrder:
     queue_ahead: float
     fair_at_creation: float
     activation: float
+    shock_event_id: str | None = None
+    shock_direction: str = "neutral"
+    shock_age_ms: float | None = None
 
 
 class ConservativeQueueFillModel:
@@ -53,6 +56,9 @@ class ConservativeQueueFillModel:
             queue_ahead=queue_ahead,
             fair_at_creation=float(payload["fair_price_at_creation"]),
             activation=float(payload["activation"]),
+            shock_event_id=payload.get("shock_event_id"),
+            shock_direction=str(payload.get("shock_direction") or "neutral"),
+            shock_age_ms=float(payload["shock_age_ms"]) if payload.get("shock_age_ms") is not None else None,
         )
 
     def on_cancel(self, event: Event) -> None:
@@ -127,6 +133,9 @@ class ConservativeQueueFillModel:
                 "fair_after_5s": None,
                 "fair_after_30s": None,
                 "activation": order.activation,
+                "shock_event_id": order.shock_event_id,
+                "shock_direction": order.shock_direction,
+                "shock_age_ms": order.shock_age_ms,
             },
         )
         if order.remaining_size <= 1e-12:

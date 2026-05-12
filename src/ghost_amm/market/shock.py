@@ -21,6 +21,8 @@ class ShockState:
     direction: str = "neutral"
     bid_activation: float = 0.0
     ask_activation: float = 0.0
+    last_shock_event_id: str | None = None
+    shock_age_ms: float | None = None
 
 
 class ShockActivator:
@@ -44,6 +46,7 @@ class ShockActivator:
         self.opposite_side_activation_ratio = opposite_side_activation_ratio
         self.trades: deque[tuple[float, str, float]] = deque()
         self.last_shock_ts: float | None = None
+        self.last_shock_event_id: str | None = None
         self.last_shock_direction = "neutral"
         self.last_state = ShockState(0.0, 0.0, 0.0, 0.0, 0.0, None, "not_initialized")
 
@@ -90,10 +93,12 @@ class ShockActivator:
                     },
                 )
                 self.last_shock_ts = now
+                self.last_shock_event_id = shock_event.event_id
                 self.last_shock_direction = observed_direction
 
         activation = 0.0
         direction = "neutral"
+        age: float | None = None
         reason = "no_recent_shock"
         if self.last_shock_ts is not None:
             age = now - self.last_shock_ts
@@ -126,6 +131,8 @@ class ShockActivator:
             direction=direction,
             bid_activation=bid_activation,
             ask_activation=ask_activation,
+            last_shock_event_id=self.last_shock_event_id,
+            shock_age_ms=age,
         )
         return self.last_state, shock_event
 

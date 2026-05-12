@@ -26,6 +26,10 @@ def _write_fills_csv(path: Path, events: list[Event]) -> None:
     fields = [
         "order_id",
         "side",
+        "shock_event_id",
+        "shock_direction",
+        "shock_age_ms",
+        "activation",
         "fill_price",
         "fill_size",
         "fill_ts",

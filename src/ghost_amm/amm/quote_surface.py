@@ -15,6 +15,9 @@ class Quote:
     activation: float
     inventory_skew: float
     fair: float
+    shock_event_id: str | None = None
+    shock_direction: str = "neutral"
+    shock_age_ms: float | None = None
 
 
 class QuoteSurface:
@@ -69,6 +72,9 @@ class QuoteSurface:
         activation: float,
         bid_activation: float | None = None,
         ask_activation: float | None = None,
+        shock_event_id: str | None = None,
+        shock_direction: str = "neutral",
+        shock_age_ms: float | None = None,
     ) -> list[Quote]:
         bid_activation = activation if bid_activation is None else bid_activation
         ask_activation = activation if ask_activation is None else ask_activation
@@ -87,9 +93,9 @@ class QuoteSurface:
             bid_size = _floor_quote_size(bid_size_base, min_order_size=self.min_order_size, max_order_size=self.max_order_size, lot_size=self.lot_size)
             ask_size = _floor_quote_size(ask_size_base, min_order_size=self.min_order_size, max_order_size=self.max_order_size, lot_size=self.lot_size)
             if bid_size is not None:
-                quotes.append(Quote("buy", bid_price, bid_size, level, bid_activation, inventory_skew, fair))
+                quotes.append(Quote("buy", bid_price, bid_size, level, bid_activation, inventory_skew, fair, shock_event_id, shock_direction, shock_age_ms))
             if ask_size is not None:
-                quotes.append(Quote("sell", ask_price, ask_size, level, ask_activation, inventory_skew, fair))
+                quotes.append(Quote("sell", ask_price, ask_size, level, ask_activation, inventory_skew, fair, shock_event_id, shock_direction, shock_age_ms))
         return quotes
 
 
