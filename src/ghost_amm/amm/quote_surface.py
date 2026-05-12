@@ -61,30 +61,43 @@ class QuoteSurface:
             lot_size=lot_size,
         )
 
-    def generate(self, *, fair: float, inventory_skew: float, activation: float) -> list[Quote]:
-        if fair <= 0 or activation <= 0:
+    def generate(
+        self,
+        *,
+        fair: float,
+        inventory_skew: float,
+        activation: float,
+        bid_activation: float | None = None,
+        ask_activation: float | None = None,
+    ) -> list[Quote]:
+        bid_activation = activation if bid_activation is None else bid_activation
+        ask_activation = activation if ask_activation is None else ask_activation
+        if fair <= 0 or (bid_activation <= 0 and ask_activation <= 0):
             return []
         half = self.half_spread_bps / 10_000
         step = self.step_bps / 10_000
         skew = self.skew_strength_bps * inventory_skew / 10_000
-        bid_size_base = self.base_order_size * activation * math.exp(-self.size_skew_strength * inventory_skew)
-        ask_size_base = self.base_order_size * activation * math.exp(self.size_skew_strength * inventory_skew)
+        bid_size_base = self.base_order_size * bid_activation * math.exp(-self.size_skew_strength * inventory_skew)
+        ask_size_base = self.base_order_size * ask_activation * math.exp(self.size_skew_strength * inventory_skew)
         quotes: list[Quote] = []
         for level in range(self.levels):
             distance = half + level * step
             bid_price = _floor_to_step(fair * math.exp(-(distance + skew)), self.tick_size)
             ask_price = _ceil_to_step(fair * math.exp(distance - skew), self.tick_size)
-            bid_size = _floor_to_step(_clamp(bid_size_base, self.min_order_size, self.max_order_size), self.lot_size)
-            ask_size = _floor_to_step(_clamp(ask_size_base, self.min_order_size, self.max_order_size), self.lot_size)
-            if bid_size >= self.min_order_size:
-                quotes.append(Quote("buy", bid_price, bid_size, level, activation, inventory_skew, fair))
-            if ask_size >= self.min_order_size:
-                quotes.append(Quote("sell", ask_price, ask_size, level, activation, inventory_skew, fair))
+            bid_size = _floor_quote_size(bid_size_base, min_order_size=self.min_order_size, max_order_size=self.max_order_size, lot_size=self.lot_size)
+            ask_size = _floor_quote_size(ask_size_base, min_order_size=self.min_order_size, max_order_size=self.max_order_size, lot_size=self.lot_size)
+            if bid_size is not None:
+                quotes.append(Quote("buy", bid_price, bid_size, level, bid_activation, inventory_skew, fair))
+            if ask_size is not None:
+                quotes.append(Quote("sell", ask_price, ask_size, level, ask_activation, inventory_skew, fair))
         return quotes
 
 
-def _clamp(value: float, lo: float, hi: float) -> float:
-    return min(max(value, lo), hi)
+def _floor_quote_size(value: float, *, min_order_size: float, max_order_size: float, lot_size: float) -> float | None:
+    if value < min_order_size:
+        return None
+    size = _floor_to_step(min(value, max_order_size), lot_size)
+    return size if size >= min_order_size else None
 
 
 def _floor_to_step(value: float, step: float) -> float:

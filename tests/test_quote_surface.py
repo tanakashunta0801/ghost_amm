@@ -44,3 +44,46 @@ def test_quote_surface_underweight_moves_bids_closer_and_asks_farther() -> None:
 
 def test_activation_zero_generates_no_quotes() -> None:
     assert _surface().generate(fair=10000, inventory_skew=0, activation=0) == []
+
+
+def test_raw_size_below_min_order_size_skips_quote() -> None:
+    surface = QuoteSurface(
+        levels=1,
+        base_order_size=0.001,
+        half_spread_bps=10,
+        step_bps=10,
+        skew_strength_bps=0,
+        size_skew_strength=0,
+        min_order_size=0.0005,
+        max_order_size=10,
+        tick_size=1,
+        lot_size=0.0001,
+    )
+
+    assert surface.generate(fair=10000, inventory_skew=0, activation=0.4) == []
+    quotes = surface.generate(fair=10000, inventory_skew=0, activation=0.5)
+    assert {quote.side for quote in quotes} == {"buy", "sell"}
+    assert all(quote.size == 0.0005 for quote in quotes)
+
+
+def test_side_specific_activation_controls_bid_and_ask() -> None:
+    surface = QuoteSurface(
+        levels=1,
+        base_order_size=0.001,
+        half_spread_bps=10,
+        step_bps=10,
+        skew_strength_bps=0,
+        size_skew_strength=0,
+        min_order_size=0.0005,
+        max_order_size=10,
+        tick_size=1,
+        lot_size=0.0001,
+    )
+
+    bid_only = surface.generate(fair=10000, inventory_skew=0, activation=1, bid_activation=0.5, ask_activation=0.4)
+    assert [quote.side for quote in bid_only] == ["buy"]
+    assert bid_only[0].activation == 0.5
+
+    ask_only = surface.generate(fair=10000, inventory_skew=0, activation=1, bid_activation=0.4, ask_activation=0.5)
+    assert [quote.side for quote in ask_only] == ["sell"]
+    assert ask_only[0].activation == 0.5

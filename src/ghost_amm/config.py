@@ -68,7 +68,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "amm": {
         "levels": 6,
-        "base_order_size": 0.0002,
+        "base_order_size": 0.001,
         "half_spread_bps": 8,
         "step_bps": 10,
         "skew_strength_bps": 80,
@@ -87,6 +87,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "minimum_wait_after_shock_ms": 2000,
         "activation_decay_ms": 30000,
         "min_activation_to_quote": 0.15,
+        "opposite_side_activation_ratio": 0.0,
     },
     "fill_model": {
         "queue_ahead_multiplier": 1.5,

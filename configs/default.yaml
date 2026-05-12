@@ -70,7 +70,7 @@ inventory:
 
 amm:
   levels: 6
-  base_order_size: 0.0002
+  base_order_size: 0.001
   half_spread_bps: 8
   step_bps: 10
   skew_strength_bps: 80
@@ -89,6 +89,7 @@ shock:
   minimum_wait_after_shock_ms: 2000
   activation_decay_ms: 30000
   min_activation_to_quote: 0.15
+  opposite_side_activation_ratio: 0.0
   infer_from_bitbank_transactions: true
   infer_from_depth_thinning: true
   infer_from_spread_widening: true

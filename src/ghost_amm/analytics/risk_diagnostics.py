@@ -28,6 +28,8 @@ def analyze_risk_blocks(events: Iterable[Event]) -> RiskDiagnostics:
     allow_quote = 0
     series: dict[str, list[float]] = {
         "activation": [],
+        "bid_activation": [],
+        "ask_activation": [],
         "force_ratio": [],
         "depth_20bps": [],
         "spread_bps": [],

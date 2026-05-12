@@ -113,6 +113,9 @@ class GhostAmmPipeline:
                 payload=asdict(risk_decision)
                 | {
                     "activation": shock_state.activation,
+                    "direction": shock_state.direction,
+                    "bid_activation": shock_state.bid_activation,
+                    "ask_activation": shock_state.ask_activation,
                     "force_ratio": shock_state.force_ratio,
                     "recent_taker_buy_notional": shock_state.recent_taker_buy_notional,
                     "recent_taker_sell_notional": shock_state.recent_taker_sell_notional,
@@ -135,7 +138,13 @@ class GhostAmmPipeline:
         if fair_state.is_valid and fair_state.fair is not None:
             surface = QuoteSurface.from_config(self.config.section("amm"), self.pair_spec)
             skew = self.inventory.skew(fair_state.fair) or 0.0
-            quotes = surface.generate(fair=fair_state.fair, inventory_skew=skew, activation=shock_state.activation)
+            quotes = surface.generate(
+                fair=fair_state.fair,
+                inventory_skew=skew,
+                activation=shock_state.activation,
+                bid_activation=shock_state.bid_activation,
+                ask_activation=shock_state.ask_activation,
+            )
 
         projector_events = self.projector.sync(
             quotes=quotes,
