@@ -44,6 +44,7 @@ uv run --extra test pytest -q
 - Long recording support: `record-bitbank-public --prevent-sleep` keeps Windows awake during the recording process when the OS allows it.
 - Long recording observability: `record-bitbank-public --heartbeat-interval-sec` emits periodic heartbeat events for stall diagnostics.
 - Recording monitor: `recording-status` reports file freshness, strict inspection status, and stale recording failures.
+- Public data gate runner: `run-public-data-gate` inspects a recording once, replays multiple configs, writes per-config reports, and evaluates `quality_gate.json`.
 
 ## In Progress
 
@@ -148,6 +149,15 @@ uv run ghost-amm evaluate-quality-gate `
   --summary data/reports/bitbank_btc_jpy_24h_config_a/summary.json data/reports/bitbank_btc_jpy_24h_config_b/summary.json `
   --recording-inspection data/reports/bitbank_btc_jpy_24h_config_a/recording_inspection.json `
   --out data/reports/bitbank_btc_jpy_24h_quality_gate.json
+```
+
+One-shot 24h public data gate:
+
+```powershell
+uv run ghost-amm run-public-data-gate `
+  --events data/raw/bitbank_btc_jpy_24h_20260512_234537*.jsonl `
+  --configs configs/default.yaml configs/diagnostic_controlled_churn.yaml `
+  --out data/reports/bitbank_btc_jpy_24h_gate
 ```
 
 ## Pre-Live Completion Gates
