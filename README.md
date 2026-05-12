@@ -7,19 +7,13 @@ Research-first prototype for a bitbank spot BTC/JPY virtual AMM. The MVP records
 ```powershell
 uv run --extra test pytest
 
-uv run ghost-amm generate-synthetic `
-  --scenario sell_shock `
-  --venue synthetic_bitbank `
-  --pair btc_jpy `
-  --out data/raw/sell_shock.jsonl
-
 uv run ghost-amm replay `
-  --events data/raw/sell_shock.jsonl `
+  --events examples/sell_shock/input.jsonl `
   --config configs/default.yaml `
   --out data/reports/sell_shock
 ```
 
-The replay command writes `events.jsonl`, `fills.csv`, `summary.json`, and `report.md` under the output directory.
+The replay command writes generated artifacts under `data/reports/`, which is intentionally ignored by git. Deterministic example input and expected summary files live under `examples/`.
 
 ## Public Dry Run
 
