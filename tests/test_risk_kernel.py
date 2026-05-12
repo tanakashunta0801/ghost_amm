@@ -305,3 +305,61 @@ def test_fair_drift_5s_window_blocks_bid_side() -> None:
     assert not decision.allow_buy
     assert decision.allow_sell
     assert decision.side_block_reasons["buy"] == "fair_drift_too_large"
+
+
+def test_last_trade_deviation_blocks_all_quotes() -> None:
+    book = OrderBook("bitbank", "BTC/JPY")
+    book.apply_snapshot({"bids": [["99", "100000"]], "asks": [["101", "100000"]]}, 1, 1)
+    risk = RiskKernel(
+        market_cfg={"max_spread_bps": 500, "min_depth_20bps_jpy": 0},
+        risk_cfg={"block_on_pair_stop_flags": True, "max_abs_skew": 10, "max_last_trade_fair_deviation_bps": 500},
+        shock_cfg={"min_activation_to_quote": 0.1},
+        amm_cfg={"max_order_size": 1},
+    )
+    risk.record_trade(price=120, ts_ms=1000)
+
+    decision = risk.evaluate(
+        book=book,
+        fair_state=FairPriceState(100, 1, 10, True),
+        shock_state=ShockState(1, 1, 0, 0, 1, 1, None),
+        inventory=InventoryState(10, 10_000),
+        pair_spec=fallback_btc_jpy_spec(),
+        status=BitbankStatus("btc_jpy", "NORMAL", 0.0001),
+        now_ms=1000,
+    )
+
+    assert not decision.allow_quote
+    assert not decision.allow_buy
+    assert not decision.allow_sell
+    assert decision.reason == "last_trade_fair_deviation_too_large"
+
+
+def test_old_last_trade_deviation_is_ignored() -> None:
+    book = OrderBook("bitbank", "BTC/JPY")
+    book.apply_snapshot({"bids": [["99", "100000"]], "asks": [["101", "100000"]]}, 1, 1)
+    risk = RiskKernel(
+        market_cfg={"max_spread_bps": 500, "min_depth_20bps_jpy": 0},
+        risk_cfg={
+            "block_on_pair_stop_flags": True,
+            "max_abs_skew": 10,
+            "max_last_trade_fair_deviation_bps": 500,
+            "last_trade_fair_deviation_max_age_ms": 1000,
+        },
+        shock_cfg={"min_activation_to_quote": 0.1},
+        amm_cfg={"max_order_size": 1},
+    )
+    risk.record_trade(price=120, ts_ms=1000)
+
+    decision = risk.evaluate(
+        book=book,
+        fair_state=FairPriceState(100, 1, 10, True),
+        shock_state=ShockState(1, 1, 0, 0, 1, 1, None),
+        inventory=InventoryState(10, 10_000),
+        pair_spec=fallback_btc_jpy_spec(),
+        status=BitbankStatus("btc_jpy", "NORMAL", 0.0001),
+        now_ms=3001,
+    )
+
+    assert decision.allow_quote
+    assert decision.allow_buy
+    assert decision.allow_sell

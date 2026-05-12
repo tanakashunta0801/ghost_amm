@@ -62,6 +62,8 @@ class GhostAmmPipeline:
         self._ingest_metadata(event)
         if event.event_type in {"order_book_snapshot", "order_book_delta"}:
             self.book.apply_event(event)
+        elif event.event_type == "trade":
+            self.risk.record_trade(price=float(event.payload["price"]), ts_ms=event.ts_exchange)
 
         fair_state = self.fair_engine.from_market_event(self.book, event, event.ts_exchange)
         self.last_fair = fair_state

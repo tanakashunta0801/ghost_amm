@@ -32,6 +32,7 @@ class RiskKernel:
         self.fill_history: deque[tuple[float, str]] = deque()
         self.inventory_change_history: deque[tuple[float, str, float]] = deque()
         self.fill_burst_cooldown_until: dict[str, float] = {}
+        self.last_trade: tuple[float, float] | None = None
 
     def record_fill(self, *, side: str, ts_ms: float, price: float | None = None, amount: float | None = None) -> None:
         side = str(side)
@@ -50,6 +51,10 @@ class RiskKernel:
         same_side_count = sum(1 for _, fill_side in self.fill_history if fill_side == side)
         if same_side_count >= max_fills:
             self.fill_burst_cooldown_until[side] = ts_ms + cooldown_ms
+
+    def record_trade(self, *, price: float, ts_ms: float) -> None:
+        if price > 0:
+            self.last_trade = (ts_ms, price)
 
     def evaluate(
         self,
@@ -90,6 +95,9 @@ class RiskKernel:
                 return RiskDecision(False, False, False, 0.0, "pair_stop_flag")
         if book.stale and self.risk_cfg.get("block_on_sequence_ordering_violation", True):
             return RiskDecision(False, False, False, 0.0, book.stale_reason or "book_stale")
+        if self._last_trade_deviation_too_large(now_ms, fair_state.fair):
+            reason = "last_trade_fair_deviation_too_large"
+            return RiskDecision(False, False, False, 0.0, reason, ["buy", "sell"], None, {"buy": reason, "sell": reason})
         allow_buy = not (pair_spec and pair_spec.stop_buy_order)
         allow_sell = not (pair_spec and pair_spec.stop_sell_order)
         fair_drift_blocks = self._fair_drift_blocked_sides(now_ms, fair_state.fair)
@@ -148,6 +156,17 @@ class RiskKernel:
             else:
                 break
         return value
+
+    def _last_trade_deviation_too_large(self, now_ms: float, fair: float) -> bool:
+        threshold = float(self.risk_cfg.get("max_last_trade_fair_deviation_bps", 0) or 0)
+        if threshold <= 0 or self.last_trade is None:
+            return False
+        trade_ts, trade_price = self.last_trade
+        max_age_ms = float(self.risk_cfg.get("last_trade_fair_deviation_max_age_ms", 3000))
+        if now_ms - trade_ts > max_age_ms:
+            return False
+        deviation_bps = abs(trade_price - fair) / fair * 10_000
+        return deviation_bps > threshold
 
     def _fill_burst_blocked_sides(self, now_ms: float) -> list[str]:
         blocked: list[str] = []

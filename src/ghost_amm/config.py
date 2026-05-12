@@ -122,6 +122,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "max_fair_rise_bps_1s_for_ask": 0,
         "max_fair_drop_bps_5s_for_bid": 0,
         "max_fair_rise_bps_5s_for_ask": 0,
+        "max_last_trade_fair_deviation_bps": 0,
+        "last_trade_fair_deviation_max_age_ms": 3000,
         "block_on_sequence_ordering_violation": True,
         "block_on_bitbank_status_not_normal": True,
         "block_on_pair_stop_flags": True,
