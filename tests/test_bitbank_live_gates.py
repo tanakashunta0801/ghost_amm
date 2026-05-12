@@ -61,10 +61,95 @@ def test_pipeline_blocks_even_when_live_gates_pass_in_mvp(monkeypatch) -> None:
     monkeypatch.setenv("GHOST_AMM_ENABLE_LIVE", "I_ACCEPT_RISK")
     monkeypatch.setenv("BITBANK_API_KEY", "k")
     monkeypatch.setenv("BITBANK_API_SECRET", "s")
-    cfg = Config({"execution": {"mode": "live", "enable_live_orders": True}})
+    cfg = Config(
+        {
+            "execution": {
+                "mode": "live",
+                "enable_live_orders": True,
+                "confirm_api_key_no_withdrawal_permission": True,
+                "positive_quality_gate_passed": True,
+            }
+        }
+    )
 
     output = ReplayEngine(cfg).run(generate_synthetic_events("sell_shock", "bitbank", "btc_jpy"))
     blocked = [event for event in output if event.event_type == "live_order_blocked"]
 
     assert blocked
     assert all(event.payload["reason"] == "mvp_live_submission_disabled" for event in blocked)
+
+
+def test_future_live_gates_require_manual_operational_confirmations() -> None:
+    cfg = Config({"execution": {"mode": "live", "enable_live_orders": True}})
+    book = OrderBook("bitbank", "BTC/JPY")
+    book.apply_snapshot({"bids": [["100", "1"]], "asks": [["102", "1"]]}, 1, 1)
+    common = {
+        "config": cfg,
+        "intent": OrderIntent(venue="bitbank", pair="btc_jpy", symbol="BTC/JPY", side="buy", price=99, amount=0.001),
+        "pair_spec": fallback_btc_jpy_spec(),
+        "status": BitbankStatus("btc_jpy", "NORMAL", 0.0001),
+        "book": book,
+        "risk": RiskDecision(True, True, True, 0.01),
+        "clock_drift_ms": 0,
+        "env": {"GHOST_AMM_ENABLE_LIVE": "I_ACCEPT_RISK", "BITBANK_API_KEY": "k", "BITBANK_API_SECRET": "s"},
+    }
+
+    result = evaluate_live_order_gates(**common)
+    assert not result.allowed
+    assert result.reason == "api_key_withdrawal_permission_unconfirmed"
+
+    cfg = Config(
+        {
+            "execution": {
+                "mode": "live",
+                "enable_live_orders": True,
+                "confirm_api_key_no_withdrawal_permission": True,
+            }
+        }
+    )
+    result = evaluate_live_order_gates(**(common | {"config": cfg}))
+    assert not result.allowed
+    assert result.reason == "positive_quality_gate_not_passed"
+
+    cfg = Config(
+        {
+            "execution": {
+                "mode": "live",
+                "enable_live_orders": True,
+                "confirm_api_key_no_withdrawal_permission": True,
+                "positive_quality_gate_passed": True,
+                "unmanaged_open_orders_present": True,
+            }
+        }
+    )
+    result = evaluate_live_order_gates(**(common | {"config": cfg}))
+    assert not result.allowed
+    assert result.reason == "unmanaged_open_orders_present"
+
+
+def test_post_only_only_config_is_a_live_gate() -> None:
+    cfg = Config(
+        {
+            "execution": {
+                "mode": "live",
+                "enable_live_orders": True,
+                "post_only_only": False,
+            }
+        }
+    )
+    book = OrderBook("bitbank", "BTC/JPY")
+    book.apply_snapshot({"bids": [["100", "1"]], "asks": [["102", "1"]]}, 1, 1)
+
+    result = evaluate_live_order_gates(
+        config=cfg,
+        intent=OrderIntent(venue="bitbank", pair="btc_jpy", symbol="BTC/JPY", side="buy", price=99, amount=0.001),
+        pair_spec=fallback_btc_jpy_spec(),
+        status=BitbankStatus("btc_jpy", "NORMAL", 0.0001),
+        book=book,
+        risk=RiskDecision(True, True, True, 0.01),
+        clock_drift_ms=0,
+        env={"GHOST_AMM_ENABLE_LIVE": "I_ACCEPT_RISK", "BITBANK_API_KEY": "k", "BITBANK_API_SECRET": "s"},
+    )
+
+    assert not result.allowed
+    assert result.reason == "post_only_only_false"

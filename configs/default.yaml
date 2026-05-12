@@ -43,13 +43,16 @@ execution:
   mode: replay
   venue: bitbank
   enable_live_orders: false
+  post_only_only: true
+  unmanaged_open_orders_present: false
+  confirm_api_key_no_withdrawal_permission: false
+  positive_quality_gate_passed: false
   require_live_env_var: true
   live_env_var_name: GHOST_AMM_ENABLE_LIVE
   live_env_var_value: I_ACCEPT_RISK
   cancel_on_start: false
   refuse_if_unmanaged_orders_exist: true
   max_active_orders_per_pair: 20
-  post_only_only: true
   quote_ttl_ms: 3000
   min_quote_replace_interval_ms: 0
   quote_replace_threshold_bps: 0

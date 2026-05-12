@@ -46,6 +46,14 @@ def evaluate_live_order_gates(
         return LiveGateResult(False, "pair_metadata_unfetched")
     if status is None or not status.is_normal:
         return LiveGateResult(False, "bitbank_status_not_normal")
+    if not config.get("execution.post_only_only", True):
+        return LiveGateResult(False, "post_only_only_false")
+    if config.get("execution.unmanaged_open_orders_present", False):
+        return LiveGateResult(False, "unmanaged_open_orders_present")
+    if not config.get("execution.confirm_api_key_no_withdrawal_permission", False):
+        return LiveGateResult(False, "api_key_withdrawal_permission_unconfirmed")
+    if not config.get("execution.positive_quality_gate_passed", False):
+        return LiveGateResult(False, "positive_quality_gate_not_passed")
     if intent.pair != "btc_jpy" or pair_spec.name != "btc_jpy":
         return LiveGateResult(False, "mvp_pair_must_be_btc_jpy")
     if not pair_spec.is_enabled:
