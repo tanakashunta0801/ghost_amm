@@ -21,6 +21,7 @@ from ghost_amm.recorder.bitbank_public_recorder import BitbankPublicRecorder
 from ghost_amm.recorder.inspection import inspect_recording
 from ghost_amm.recorder.mock_recorder import generate_synthetic_events
 from ghost_amm.replay.engine import ReplayEngine
+from ghost_amm.system_sleep import SystemSleepPreventer
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -58,6 +59,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--max-reconnects", type=int, default=10)
     p.add_argument("--reconnect-delay-sec", type=float, default=3.0)
     p.add_argument("--no-metadata", action="store_true")
+    p.add_argument("--prevent-sleep", action="store_true")
 
     p = sub.add_parser("dry-run-bitbank-public")
     p.add_argument("--pair", default="btc_jpy")
@@ -193,8 +195,22 @@ def main(argv: list[str] | None = None) -> int:
             max_reconnects=args.max_reconnects,
             reconnect_delay_sec=args.reconnect_delay_sec,
         )
-        asyncio.run(recorder.run())
-        print(json.dumps({"events": len(recorder.events), "out": args.out, "files": [str(path) for path in recorder.output_paths]}, sort_keys=True))
+        with SystemSleepPreventer(enabled=args.prevent_sleep) as sleep_prevention:
+            if args.prevent_sleep and not sleep_prevention.active:
+                print(json.dumps({"ok": False, "error": "prevent_sleep_unavailable", "prevent_sleep": sleep_prevention.to_dict()}, sort_keys=True), file=sys.stderr)
+                return 1
+            asyncio.run(recorder.run())
+        print(
+            json.dumps(
+                {
+                    "events": len(recorder.events),
+                    "out": args.out,
+                    "files": [str(path) for path in recorder.output_paths],
+                    "prevent_sleep": sleep_prevention.to_dict(),
+                },
+                sort_keys=True,
+            )
+        )
         return 0
 
     if args.command == "dry-run-bitbank-public":

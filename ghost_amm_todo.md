@@ -41,6 +41,7 @@ uv run --extra test pytest -q
 - TODO-022: future live gate conditions are explicit, and MVP still blocks real submission.
 - Recording gate: `validate-public-recording` fails closed on strict inspection errors before writing replay reports.
 - Quality gate: `evaluate-quality-gate` fails closed unless inspection duration, fills, alpha, and churn thresholds pass across multiple reports.
+- Long recording support: `record-bitbank-public --prevent-sleep` keeps Windows awake during the recording process when the OS allows it.
 
 ## In Progress
 
@@ -100,7 +101,8 @@ uv run --with "python-socketio[client]>=5" --with aiohttp ghost-amm record-bitba
   --timeout-sec 600 `
   --rotate-every-bytes 104857600 `
   --flush-every-events 1 `
-  --max-reconnects 100
+  --max-reconnects 100 `
+  --prevent-sleep
 ```
 
 Strict inspection:
@@ -128,7 +130,8 @@ uv run --with "python-socketio[client]>=5" --with aiohttp ghost-amm record-bitba
   --timeout-sec 86400 `
   --rotate-every-bytes 104857600 `
   --flush-every-events 1 `
-  --max-reconnects 100
+  --max-reconnects 100 `
+  --prevent-sleep
 
 uv run ghost-amm validate-public-recording `
   --events data/raw/bitbank_btc_jpy_24h.jsonl `

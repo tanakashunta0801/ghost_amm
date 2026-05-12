@@ -43,8 +43,11 @@ uv run --with "python-socketio[client]>=5" --with aiohttp ghost-amm record-bitba
   --timeout-sec 3600 `
   --rotate-every-bytes 104857600 `
   --flush-every-events 1 `
-  --max-reconnects 100
+  --max-reconnects 100 `
+  --prevent-sleep
 ```
+
+On Windows, `--prevent-sleep` requests the OS to keep the system awake for the recording process. It cannot protect against lid-close sleep policy, power loss, shutdown, or network loss.
 
 Inspect the recording before replay:
 
