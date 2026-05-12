@@ -45,6 +45,7 @@ uv run --extra test pytest -q
 - Long recording observability: `record-bitbank-public --heartbeat-interval-sec` emits periodic heartbeat events for stall diagnostics.
 - Recording monitor: `recording-status` reports file freshness, strict inspection status, and stale recording failures.
 - Public data gate runner: `run-public-data-gate` inspects a recording once, replays multiple configs, writes per-config reports, and evaluates `quality_gate.json`.
+- CLI event inputs expand wildcards internally, so rotated JSONL sets like `data/raw/bitbank_btc_jpy_24h_*.jsonl` work in PowerShell.
 
 ## In Progress
 

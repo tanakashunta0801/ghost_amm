@@ -9,15 +9,18 @@ from ghost_amm.exchange.bitbank_rules import BitbankStatus, fallback_btc_jpy_spe
 
 def test_run_public_data_gate_writes_inspection_replays_and_quality_gate(tmp_path, capsys) -> None:
     recording = tmp_path / "recording.jsonl"
+    recording_rotated = tmp_path / "recording_0001.jsonl"
     out = tmp_path / "gate"
     config = Path("configs/default.yaml")
-    write_jsonl(recording, _valid_recording_events())
+    events = _valid_recording_events()
+    write_jsonl(recording, events[:3])
+    write_jsonl(recording_rotated, events[3:])
 
     code = main(
         [
             "run-public-data-gate",
             "--events",
-            str(recording),
+            str(tmp_path / "recording*.jsonl"),
             "--configs",
             str(config),
             str(config),

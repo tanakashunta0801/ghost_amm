@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import glob
 import json
 import sys
 from dataclasses import asdict
@@ -156,6 +157,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", required=True)
 
     args = parser.parse_args(argv)
+    if hasattr(args, "events"):
+        args.events = _expand_path_args(args.events)
     config_path = getattr(args, "config", None)
     if config_path is not None and not Path(config_path).exists():
         print(json.dumps({"ok": False, "error": "config_not_found", "path": str(config_path)}, sort_keys=True), file=sys.stderr)
@@ -512,6 +515,18 @@ def _write_json(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as fh:
         json.dump(data, fh, ensure_ascii=False, indent=2, sort_keys=True)
+
+
+def _expand_path_args(paths: list[str]) -> list[str]:
+    expanded: list[str] = []
+    for path in paths:
+        if glob.has_magic(path):
+            matches = sorted(glob.glob(path))
+            if matches:
+                expanded.extend(matches)
+                continue
+        expanded.append(path)
+    return expanded
 
 
 def _quality_gate_thresholds(args: argparse.Namespace) -> QualityGateThresholds:
