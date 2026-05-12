@@ -58,6 +58,15 @@ For strict channel coverage, including observed ticker and trade events:
 uv run ghost-amm inspect-recording data/raw/bitbank_btc_jpy_1h.jsonl --strict
 ```
 
+To fail closed on inspection problems and write replay reports in one step:
+
+```powershell
+uv run ghost-amm validate-public-recording `
+  --events data/raw/bitbank_btc_jpy_1h.jsonl `
+  --config configs/default.yaml `
+  --out data/reports/bitbank_btc_jpy_1h
+```
+
 ## External Fair Price Events
 
 Replay can consume `external_fair_price` events as an additional robust-fair source. A CCXT public ticker snapshot can be converted to one JSONL event by combining BTC/USD and USD/JPY:

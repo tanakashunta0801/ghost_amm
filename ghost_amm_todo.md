@@ -39,6 +39,7 @@ uv run --extra test pytest -q
 - TODO-020: orderbook stale/recovery tests exist.
 - TODO-021: live order intent and live order blocked events are separated.
 - TODO-022: future live gate conditions are explicit, and MVP still blocks real submission.
+- Recording gate: `validate-public-recording` fails closed on strict inspection errors before writing replay reports.
 
 ## In Progress
 
@@ -83,11 +84,10 @@ uv run ghost-amm inspect-recording data/raw/bitbank_btc_jpy_10m.jsonl --strict
 Replay:
 
 ```powershell
-uv run ghost-amm replay `
+uv run ghost-amm validate-public-recording `
   --events data/raw/bitbank_btc_jpy_10m.jsonl `
   --config configs/default.yaml `
-  --out data/reports/bitbank_btc_jpy_10m `
-  --replay-order arrival_order
+  --out data/reports/bitbank_btc_jpy_10m
 ```
 
 24h recording gate:
@@ -101,6 +101,11 @@ uv run --with "python-socketio[client]>=5" --with aiohttp ghost-amm record-bitba
   --rotate-every-bytes 104857600 `
   --flush-every-events 1 `
   --max-reconnects 100
+
+uv run ghost-amm validate-public-recording `
+  --events data/raw/bitbank_btc_jpy_24h.jsonl `
+  --config configs/default.yaml `
+  --out data/reports/bitbank_btc_jpy_24h
 ```
 
 ## Pre-Live Completion Gates

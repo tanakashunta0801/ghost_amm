@@ -86,6 +86,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("events", nargs="+")
     p.add_argument("--strict", action="store_true")
 
+    p = sub.add_parser("validate-public-recording")
+    p.add_argument("--events", required=True, nargs="+")
+    p.add_argument("--config", default="configs/default.yaml")
+    p.add_argument("--out", required=True)
+    p.add_argument("--strict", action=argparse.BooleanOptionalAction, default=True)
+    p.add_argument("--replay-order", choices=["arrival_order", "exchange_time_sort"], default="arrival_order")
+    p.add_argument("--strict-sequence", action=argparse.BooleanOptionalAction, default=None)
+
     p = sub.add_parser("analyze-risk-blocks")
     p.add_argument("--events", required=True, nargs="+")
     p.add_argument("--out", required=True)
@@ -240,6 +248,59 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result.to_dict(), ensure_ascii=False, sort_keys=True))
         return 0 if result.ok_for_replay else 1
 
+    if args.command == "validate-public-recording":
+        config = load_config(args.config)
+        out = Path(args.out)
+        out.mkdir(parents=True, exist_ok=True)
+        inspection = inspect_recording(args.events, strict=args.strict)
+        _write_json(out / "recording_inspection.json", inspection.to_dict())
+        if not inspection.ok_for_replay:
+            print(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "stage": "inspect_recording",
+                        "reason": inspection.reason,
+                        "recording_inspection": str(out / "recording_inspection.json"),
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+            )
+            return 1
+        engine = ReplayEngine(config)
+        try:
+            output = engine.run_files(
+                args.events,
+                out,
+                replay_order=args.replay_order,
+                strict_sequence=args.strict_sequence,
+            )
+        except ValueError as exc:
+            print(json.dumps({"ok": False, "stage": "replay", "reason": str(exc)}, ensure_ascii=False, sort_keys=True))
+            return 1
+        fills = sum(1 for event in output if event.event_type == "virtual_fill")
+        orders = sum(1 for event in output if event.event_type == "virtual_order_placed")
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "events": len(output),
+                    "source_files": len(args.events),
+                    "source_events": inspection.events,
+                    "virtual_orders": orders,
+                    "virtual_fills": fills,
+                    "replay_order": engine.last_replay_order,
+                    "strict_sequence": engine.last_strict_sequence,
+                    "recording_inspection": str(out / "recording_inspection.json"),
+                    "summary": str(out / "summary.json"),
+                    "out": str(out),
+                },
+                sort_keys=True,
+            )
+        )
+        return 0
+
     if args.command == "analyze-risk-blocks":
         events = []
         for path in args.events:
@@ -304,6 +365,12 @@ def _compact(value: object) -> object:
 
 def _parse_float_list(value: str) -> list[float]:
     return [float(item.strip()) for item in value.split(",") if item.strip()]
+
+
+def _write_json(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2, sort_keys=True)
 
 
 def _last_fair(events: list) -> float | None:
