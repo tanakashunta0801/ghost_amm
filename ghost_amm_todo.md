@@ -57,7 +57,7 @@ uv run --extra test pytest -q
 - Active 24h public recording is running locally for `btc_jpy`.
 - Recording output: `data/raw/bitbank_btc_jpy_24h_20260512_234537.jsonl`.
 - Started: 2026-05-12 23:45:37 JST. Expected completion: around 2026-05-13 23:45 JST.
-- Last checked: 2026-05-13 01:15 JST, duration 1.50h, 40.8MB, strict recording status `ok_for_replay=true`, stale `false`, sequence violations 0, duration gate `1.50<24h`.
+- Last checked: 2026-05-13 12:16 JST, duration 12.51h, 318.2MB across 4 rotated JSONL files, strict recording status `ok_for_replay=true`, stale `false`, sequence violations 0, max event gap 3.3s, duration gate `12.51<24h`.
 - Completion watcher v5 is running locally and should run `run-public-data-gate --require-min-duration-before-replay --prevent-sleep` with `configs/default.yaml` and `configs/diagnostic_controlled_churn.yaml` as quality-gate configs, plus `configs/diagnostic_relaxed_activation.yaml` as a diagnostic replay after the 24h recorder exits.
 - Expected gate output: `data/reports/bitbank_btc_jpy_24h_gate_20260512_234537`.
 - No remaining code-only TODO is currently in progress; the active gate is real public data collection and validation.
