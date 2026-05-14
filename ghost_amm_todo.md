@@ -54,6 +54,7 @@ uv run --extra test pytest -q
 - Public data gate runner supports `--diagnostic-configs`, so high-churn diagnostic replays are generated without counting against the quality gate.
 - Recording split helper: `split-recording` creates time-based replay splits with metadata copied and timestamp-adjusted for split-period sanity checks.
 - Public data gate runner supports `--split-parts` and `--split-diagnostic-configs`, so split-period sanity replay reports can be generated with the main gate output, including diagnostic configs when requested.
+- Public data gate runner writes `public_data_gate.md`, so recording status, quality replays, diagnostic replays, split sanity replays, and output paths are reviewable without parsing JSON.
 
 ## In Progress
 
@@ -61,7 +62,7 @@ uv run --extra test pytest -q
 - Recording output: `data/raw/bitbank_btc_jpy_25h_retry_20260514_204916*.jsonl`.
 - Started: 2026-05-14 20:49:16 JST. Expected completion: around 2026-05-15 21:49 JST.
 - This retry uses `--max-idle-sec 300`, `--max-reconnects 500`, `--heartbeat-interval-sec 60`, and `--prevent-sleep`.
-- Last checked: 2026-05-14 23:15 JST, duration 2.43h, strict recording status `ok_for_replay=true`, stale `false`, sequence violations 0, duration gate `2.43<24h`, current file size about 66.2 MB.
+- Last checked: 2026-05-14 23:20 JST, duration 2.51h, strict recording status `ok_for_replay=true`, stale `false`, sequence violations 0, duration gate `2.51<24h`, current file size about 69.0 MB.
 - `powercfg /requests` shows a `SYSTEM` request from the uv-managed Python recorder process, so `--prevent-sleep` is active while the process is alive.
 - At 2026-05-14 21:07 JST, the active Windows power plan was also changed locally for the recording: AC auto sleep disabled and AC hybrid sleep disabled. Before/after snapshots are under `data/logs/powercfg_*_25h_retry_20260514_204916.json`.
 - Keep AC power connected during the recording. DC/battery sleep policy was not changed, and lid-close sleep can still override process-level prevention on some Windows setups.
@@ -201,6 +202,7 @@ Split-period sanity check for `configs/diagnostic_low_churn_18h_candidate.yaml`:
 - The split gate smoke reproduced the full-sample low-churn result of 506 virtual orders and 3 fills, plus split sanity replays with first-half 180 orders / 3 fills and second-half 332 orders / 1 fill. The quality gate still failed as expected because one quality config is below `min_report_count=2` and 3 fills is below the 30-fill minimum.
 - Added and smoke-tested `run-public-data-gate --split-parts 2 --split-diagnostic-configs` on the 5.92h recording under `data/reports/bitbank_btc_jpy_5h_split_diagnostic_gate_smoke_20260514_2320`.
 - The diagnostic split smoke generated 4 split sanity replays: quality/default produced 0 fills in both halves, while diagnostic low-churn produced 0 fills / 138 orders in the first half and 1 fill / 103 orders in the second half. The gate failed as expected because the quality config still had no fills/alpha.
+- Added and smoke-tested `public_data_gate.md` generation on the active 25h recording under `data/reports/bitbank_btc_jpy_25h_gate_md_smoke_20260514_2325`. The smoke stopped before replay because the recording was still only 2.51h, and the Markdown report correctly showed `Status: FAIL`, stage `recording_duration`, `ok_for_replay=True`, and sequence violations 0.
 
 ## Do Not Do Yet
 

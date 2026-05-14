@@ -37,6 +37,7 @@ def test_run_public_data_gate_writes_inspection_replays_and_quality_gate(tmp_pat
     assert payload["recording_inspection"] == str(out / "recording_inspection.json")
     assert payload["quality_gate"] == str(out / "quality_gate.json")
     assert payload["quality_gate_report"] == str(out / "quality_gate.md")
+    assert payload["public_data_gate_report"] == str(out / "public_data_gate.md")
     assert payload["prevent_sleep"]["enabled"] is False
     assert len(payload["replays"]) == 2
     assert len(payload["diagnostic_replays"]) == 1
@@ -47,6 +48,10 @@ def test_run_public_data_gate_writes_inspection_replays_and_quality_gate(tmp_pat
     assert quality["ok"] is False
     assert len(quality["reports"]) == 2
     assert "Status: FAIL" in (out / "quality_gate.md").read_text(encoding="utf-8")
+    public_report = (out / "public_data_gate.md").read_text(encoding="utf-8")
+    assert "Status: FAIL" in public_report
+    assert "## Quality Replays" in public_report
+    assert "## Diagnostic Replays" in public_report
     assert any(failure.startswith("recording_duration_below_min:") for failure in payload["quality_failures"])
 
 
@@ -74,6 +79,8 @@ def test_run_public_data_gate_stops_before_replay_when_inspection_fails(tmp_path
     assert payload["reason"] == "missing:bitbank_ticker,trade"
     assert payload["prevent_sleep"]["enabled"] is False
     assert (out / "recording_inspection.json").exists()
+    assert (out / "public_data_gate.md").exists()
+    assert "missing:bitbank_ticker,trade" in (out / "public_data_gate.md").read_text(encoding="utf-8")
     assert not (out / "quality_gate.json").exists()
     assert not (out / "01_default" / "summary.json").exists()
 
@@ -168,6 +175,7 @@ def test_run_public_data_gate_can_include_diagnostic_split_replays(tmp_path, cap
     assert len(payload["diagnostic_replays"]) == 1
     assert len(payload["split_replays"]) == 4
     assert {item["source_role"] for item in payload["split_replays"]} == {"quality_gate", "diagnostic"}
+    assert "## Split Replays" in (out / "public_data_gate.md").read_text(encoding="utf-8")
     assert (out / "split_01_quality_gate_01_default" / "summary.json").exists()
     assert (out / "split_01_diagnostic_01_default" / "summary.json").exists()
     assert (out / "split_02_quality_gate_01_default" / "summary.json").exists()

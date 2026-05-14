@@ -417,8 +417,14 @@ def main(argv: list[str] | None = None) -> int:
             if args.prevent_sleep and not sleep_prevention.active:
                 out = Path(args.out)
                 out.mkdir(parents=True, exist_ok=True)
-                payload = {"ok": False, "stage": "prevent_sleep", "reason": "prevent_sleep_unavailable", "prevent_sleep": sleep_status}
-                _write_json(out / "public_data_gate.json", payload)
+                payload = {
+                    "ok": False,
+                    "stage": "prevent_sleep",
+                    "reason": "prevent_sleep_unavailable",
+                    "prevent_sleep": sleep_status,
+                    "out": str(out),
+                }
+                payload = _write_public_data_gate_output(out, payload)
                 print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
                 return 1
             code, payload = _run_public_data_gate(args, prevent_sleep=sleep_status)
@@ -497,6 +503,143 @@ def _write_json(path: Path, data: dict) -> None:
         json.dump(data, fh, ensure_ascii=False, indent=2, sort_keys=True)
 
 
+def _write_public_data_gate_output(out: Path, payload: dict) -> dict:
+    report_path = out / "public_data_gate.md"
+    payload = {**payload, "public_data_gate_report": str(report_path)}
+    out.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(_render_public_data_gate_markdown(payload), encoding="utf-8")
+    _write_json(out / "public_data_gate.json", payload)
+    return payload
+
+
+def _render_public_data_gate_markdown(payload: dict) -> str:
+    inspection = _read_optional_json(payload.get("recording_inspection"))
+    lines = [
+        "# Ghost AMM Public Data Gate",
+        "",
+        f"Status: {'PASS' if payload.get('ok') else 'FAIL'}",
+        "",
+    ]
+    if payload.get("stage") or payload.get("reason"):
+        lines.extend(
+            [
+                "## Stage",
+                "",
+                "| Field | Value |",
+                "|---|---|",
+                f"| stage | {_md_value(payload.get('stage'))} |",
+                f"| reason | {_md_value(payload.get('reason'))} |",
+                "",
+            ]
+        )
+    lines.extend(
+        [
+            "## Recording",
+            "",
+            "| Metric | Value |",
+            "|---|---:|",
+            f"| ok_for_replay | {_md_value(inspection.get('ok_for_replay'))} |",
+            f"| duration_hours | {_md_value(inspection.get('duration_hours'))} |",
+            f"| events | {_md_value(inspection.get('events'))} |",
+            f"| files | {_md_value(inspection.get('files'))} |",
+            f"| sequence_violations | {_md_value(inspection.get('sequence_violations'))} |",
+            f"| max_event_gap_ms | {_md_value(inspection.get('max_event_gap_ms'))} |",
+            "",
+            "## Quality Failures",
+            "",
+        ]
+    )
+    failures = payload.get("quality_failures") or []
+    if failures:
+        lines.extend(f"- `{failure}`" for failure in failures)
+    else:
+        lines.append("- None")
+    _append_replay_table(lines, "Quality Replays", payload.get("replays") or [])
+    _append_replay_table(lines, "Diagnostic Replays", payload.get("diagnostic_replays") or [])
+    _append_replay_table(lines, "Split Replays", payload.get("split_replays") or [])
+    recording_splits = payload.get("recording_splits")
+    if isinstance(recording_splits, dict) and recording_splits.get("splits"):
+        lines.extend(["", "## Recording Splits", "", "| Split | Duration Hours | Events | Path |", "|---:|---:|---:|---|"])
+        for split in recording_splits["splits"]:
+            if isinstance(split, dict):
+                lines.append(
+                    "| {index} | {duration} | {events} | `{path}` |".format(
+                        index=_md_value(split.get("index")),
+                        duration=_md_value(split.get("duration_hours")),
+                        events=_md_value(split.get("events")),
+                        path=_md_value(split.get("path")),
+                    )
+                )
+    lines.extend(
+        [
+            "",
+            "## Outputs",
+            "",
+            "| Artifact | Path |",
+            "|---|---|",
+            f"| recording_inspection | `{_md_value(payload.get('recording_inspection'))}` |",
+            f"| quality_gate | `{_md_value(payload.get('quality_gate'))}` |",
+            f"| quality_gate_report | `{_md_value(payload.get('quality_gate_report'))}` |",
+            f"| public_data_gate | `{_md_value(payload.get('out'))}` |",
+            "",
+            "This gate is based on virtual replay reports only. It is not evidence of live execution profitability.",
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
+def _append_replay_table(lines: list[str], title: str, replays: list) -> None:
+    lines.extend(
+        [
+            "",
+            f"## {title}",
+            "",
+            "| Role | Config | Alpha PnL | Orders | Fills | Fill Rate | Orders/min | Cancels/min | Out |",
+            "|---|---|---:|---:|---:|---:|---:|---:|---|",
+        ]
+    )
+    if not replays:
+        lines.append("| None |  |  |  |  |  |  |  |  |")
+        return
+    for item in replays:
+        if not isinstance(item, dict):
+            continue
+        summary = _read_optional_json(item.get("summary"))
+        role = item.get("source_role") or item.get("role")
+        if item.get("split_index") is not None:
+            role = f"{role}:split_{item.get('split_index')}"
+        lines.append(
+            "| {role} | `{config}` | {alpha} | {orders} | {fills} | {fill_rate} | {orders_per_minute} | {cancels_per_minute} | `{out}` |".format(
+                role=_md_value(role),
+                config=_md_value(item.get("config")),
+                alpha=_md_value(summary.get("strategy_alpha_pnl")),
+                orders=_md_value(summary.get("virtual_orders", item.get("virtual_orders"))),
+                fills=_md_value(summary.get("virtual_fills", item.get("virtual_fills"))),
+                fill_rate=_md_value(summary.get("fill_rate")),
+                orders_per_minute=_md_value(summary.get("orders_per_minute")),
+                cancels_per_minute=_md_value(summary.get("cancels_per_minute")),
+                out=_md_value(item.get("out")),
+            )
+        )
+
+
+def _read_optional_json(path: object) -> dict:
+    if not path:
+        return {}
+    try:
+        with Path(str(path)).open("r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _md_value(value: object) -> str:
+    if value is None:
+        return "n/a"
+    return str(value).replace("|", "\\|")
+
+
 def _run_public_data_gate(args: argparse.Namespace, *, prevent_sleep: dict) -> tuple[int, dict]:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -510,8 +653,9 @@ def _run_public_data_gate(args: argparse.Namespace, *, prevent_sleep: dict) -> t
             "reason": inspection.reason,
             "recording_inspection": str(inspection_path),
             "prevent_sleep": prevent_sleep,
+            "out": str(out),
         }
-        _write_json(out / "public_data_gate.json", payload)
+        payload = _write_public_data_gate_output(out, payload)
         return 1, payload
     if args.require_min_duration_before_replay and inspection.duration_hours < args.min_recording_hours:
         payload = {
@@ -520,8 +664,9 @@ def _run_public_data_gate(args: argparse.Namespace, *, prevent_sleep: dict) -> t
             "reason": f"recording_duration_below_min:{inspection.duration_hours}<{args.min_recording_hours}",
             "recording_inspection": str(inspection_path),
             "prevent_sleep": prevent_sleep,
+            "out": str(out),
         }
-        _write_json(out / "public_data_gate.json", payload)
+        payload = _write_public_data_gate_output(out, payload)
         return 1, payload
     summary_paths = []
     replay_results = []
@@ -533,9 +678,11 @@ def _run_public_data_gate(args: argparse.Namespace, *, prevent_sleep: dict) -> t
                 "stage": "config",
                 "reason": "config_not_found",
                 "path": str(cfg_path),
+                "recording_inspection": str(inspection_path),
                 "prevent_sleep": prevent_sleep,
+                "out": str(out),
             }
-            _write_json(out / "public_data_gate.json", payload)
+            payload = _write_public_data_gate_output(out, payload)
             return 1, payload
         run_out = out / f"{index:02d}_{cfg_path.stem}"
         engine = ReplayEngine(load_config(cfg_path))
@@ -553,9 +700,10 @@ def _run_public_data_gate(args: argparse.Namespace, *, prevent_sleep: dict) -> t
                 "reason": str(exc),
                 "config": str(cfg_path),
                 "out": str(run_out),
+                "recording_inspection": str(inspection_path),
                 "prevent_sleep": prevent_sleep,
             }
-            _write_json(out / "public_data_gate.json", payload)
+            payload = _write_public_data_gate_output(out, payload)
             return 1, payload
         summary_path = run_out / "summary.json"
         summary_paths.append(summary_path)
@@ -581,9 +729,11 @@ def _run_public_data_gate(args: argparse.Namespace, *, prevent_sleep: dict) -> t
                 "stage": "diagnostic_config",
                 "reason": "config_not_found",
                 "path": str(cfg_path),
+                "recording_inspection": str(inspection_path),
                 "prevent_sleep": prevent_sleep,
+                "out": str(out),
             }
-            _write_json(out / "public_data_gate.json", payload)
+            payload = _write_public_data_gate_output(out, payload)
             return 1, payload
         run_out = out / f"diagnostic_{index:02d}_{cfg_path.stem}"
         engine = ReplayEngine(load_config(cfg_path))
@@ -601,9 +751,10 @@ def _run_public_data_gate(args: argparse.Namespace, *, prevent_sleep: dict) -> t
                 "reason": str(exc),
                 "config": str(cfg_path),
                 "out": str(run_out),
+                "recording_inspection": str(inspection_path),
                 "prevent_sleep": prevent_sleep,
             }
-            _write_json(out / "public_data_gate.json", payload)
+            payload = _write_public_data_gate_output(out, payload)
             return 1, payload
         summary_path = run_out / "summary.json"
         diagnostic_replays.append(
@@ -651,7 +802,7 @@ def _run_public_data_gate(args: argparse.Namespace, *, prevent_sleep: dict) -> t
                 "prevent_sleep": prevent_sleep,
                 "out": str(out),
             }
-            _write_json(out / "public_data_gate.json", payload)
+            payload = _write_public_data_gate_output(out, payload)
             return 1, payload
         recording_splits = split_result.to_dict()
         split_configs: list[tuple[str, str, int]] = [
@@ -691,8 +842,9 @@ def _run_public_data_gate(args: argparse.Namespace, *, prevent_sleep: dict) -> t
                         "recording_splits": recording_splits,
                         "quality_failures": quality.failures,
                         "prevent_sleep": prevent_sleep,
+                        "out": str(out),
                     }
-                    _write_json(out / "public_data_gate.json", payload)
+                    payload = _write_public_data_gate_output(out, payload)
                     return 1, payload
                 summary_path = run_out / "summary.json"
                 split_replays.append(
@@ -724,7 +876,7 @@ def _run_public_data_gate(args: argparse.Namespace, *, prevent_sleep: dict) -> t
         "prevent_sleep": prevent_sleep,
         "out": str(out),
     }
-    _write_json(out / "public_data_gate.json", payload)
+    payload = _write_public_data_gate_output(out, payload)
     return (0 if quality.ok else 1), payload
 
 
