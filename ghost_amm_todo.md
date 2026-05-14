@@ -153,6 +153,39 @@ Interpretation:
 - It is not enough evidence of profitability: positive alpha appears only in diagnostic configs with 1-2 fills.
 - Keep the active 25h recording running; the pre-live gate still needs a full 24h+ recording and enough fills across quality-gate configs.
 
+Additional 18h churn sweeps on 2026-05-14:
+
+```powershell
+uv run ghost-amm sweep-churn `
+  --events data/raw/bitbank_btc_jpy_24h_20260512_234537*.jsonl `
+  --config configs/default.yaml `
+  --threshold 0.05 `
+  --min-activation 0.03 `
+  --max-active-orders 2,4,6 `
+  --quote-ttls-ms 30000,60000 `
+  --min-replace-intervals-ms 10000,30000 `
+  --replace-threshold-bps 2 `
+  --size-replace-threshold-ratio 0.5 `
+  --out data/reports/bitbank_btc_jpy_18h_churn_sweep_20260514_2210
+```
+
+Best row:
+
+- `threshold=0.05`, `min_activation=0.03`, `max_active_orders=2`, `quote_ttl_ms=30000`, `min_replace_interval_ms=30000`.
+- 506 virtual orders, 3 fills, `strategy_alpha_pnl=+128.5144`, `fill_rate=0.005929`, `orders_per_minute=0.4575`, `cancels_per_minute=0.4557`.
+- This improved over `diagnostic_controlled_churn.yaml` on the same 18h sample, but it is still only 3 fills.
+
+Follow-up threshold check:
+
+- `threshold=0.03`, `min_activation=0.03`, `max_active_orders=2,4,6`, `quote_ttl_ms=30000,60000`, `min_replace_interval_ms=30000`.
+- Best row had only 1 fill, `strategy_alpha_pnl=+80.02475`, and worse adverse/spread capture than the `threshold=0.05` sweep.
+
+Interpretation:
+
+- Lowering churn limits can reduce order spam without reducing the tiny observed fill count.
+- Lowering shock threshold to 0.03 did not improve this sample.
+- Do not treat the sweep best as optimized; it is in-sample over 18.43h and only 3 fills. Use it as a candidate diagnostic row after the 24h+ gate, not as live evidence.
+
 ## Do Not Do Yet
 
 - Do not create a real live order submission path in this MVP.
