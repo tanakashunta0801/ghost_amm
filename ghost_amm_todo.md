@@ -61,13 +61,13 @@ uv run --extra test pytest -q
 - Recording output: `data/raw/bitbank_btc_jpy_25h_retry_20260514_204916*.jsonl`.
 - Started: 2026-05-14 20:49:16 JST. Expected completion: around 2026-05-15 21:49 JST.
 - This retry uses `--max-idle-sec 300`, `--max-reconnects 500`, `--heartbeat-interval-sec 60`, and `--prevent-sleep`.
-- Last checked: 2026-05-14 22:56 JST, duration 2.12h, strict recording status `ok_for_replay=true`, stale `false`, sequence violations 0, duration gate `2.12<24h`, current file size about 57.1 MB.
+- Last checked: 2026-05-14 23:08 JST, duration 2.32h, strict recording status `ok_for_replay=true`, stale `false`, sequence violations 0, duration gate `2.32<24h`, current file size about 63.2 MB.
 - `powercfg /requests` shows a `SYSTEM` request from the uv-managed Python recorder process, so `--prevent-sleep` is active while the process is alive.
 - At 2026-05-14 21:07 JST, the active Windows power plan was also changed locally for the recording: AC auto sleep disabled and AC hybrid sleep disabled. Before/after snapshots are under `data/logs/powercfg_*_25h_retry_20260514_204916.json`.
 - Keep AC power connected during the recording. DC/battery sleep policy was not changed, and lid-close sleep can still override process-level prevention on some Windows setups.
 - After the gate finishes, restore normal AC sleep policy if desired with `powercfg /change standby-timeout-ac 120`, `powercfg /setacvalueindex SCHEME_CURRENT SUB_SLEEP HYBRIDSLEEP 1`, and `powercfg /setactive SCHEME_CURRENT`.
-- Completion watcher was replaced at 2026-05-14 22:49 JST without stopping the recorder. Active watcher PID is 22604; old watcher PID 37740 was stopped.
-- The active watcher should run `run-public-data-gate --require-min-duration-before-replay --prevent-sleep` after the 25h recorder exits, with quality configs `configs/default.yaml` and `configs/diagnostic_controlled_churn.yaml`, plus diagnostic configs `configs/diagnostic_relaxed_activation.yaml` and `configs/diagnostic_low_churn_18h_candidate.yaml`.
+- Completion watcher was replaced again at 2026-05-14 23:07 JST without stopping the recorder. Active watcher PID is 35324; old watcher PID 22604 was stopped after the new watcher started.
+- The active watcher should run `run-public-data-gate --require-min-duration-before-replay --prevent-sleep --split-parts 2` after the 25h recorder exits, with quality configs `configs/default.yaml` and `configs/diagnostic_controlled_churn.yaml`, plus diagnostic configs `configs/diagnostic_relaxed_activation.yaml` and `configs/diagnostic_low_churn_18h_candidate.yaml`.
 - Expected gate output: `data/reports/bitbank_btc_jpy_25h_retry_20260514_204916_gate`.
 - Previous 24h attempt `data/raw/bitbank_btc_jpy_24h_20260512_234537*.jsonl` failed the duration gate at 18.43h. Root cause candidate: the recorder process lived until the 24h timeout, but market events stopped around 18.43h; idle watchdog was added before this retry.
 - No remaining code-only TODO is currently in progress; the active gate is real public data collection and validation.
