@@ -109,8 +109,38 @@ def test_run_public_data_gate_can_stop_before_replay_when_recording_is_short(tmp
     assert payload["stage"] == "recording_duration"
     assert payload["reason"].startswith("recording_duration_below_min:")
     assert (out / "recording_inspection.json").exists()
+    assert (out / "public_data_gate.md").exists()
+    assert "recording_duration" in (out / "public_data_gate.md").read_text(encoding="utf-8")
     assert not (out / "quality_gate.json").exists()
     assert not (out / "01_default" / "summary.json").exists()
+
+
+def test_run_public_data_gate_writes_markdown_when_config_is_missing(tmp_path, capsys) -> None:
+    recording = tmp_path / "recording.jsonl"
+    out = tmp_path / "gate"
+    write_jsonl(recording, _valid_recording_events())
+
+    code = main(
+        [
+            "run-public-data-gate",
+            "--events",
+            str(recording),
+            "--configs",
+            str(tmp_path / "missing.yaml"),
+            "--out",
+            str(out),
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 1
+    assert payload["stage"] == "config"
+    assert payload["reason"] == "config_not_found"
+    assert (out / "recording_inspection.json").exists()
+    assert (out / "public_data_gate.md").exists()
+    public_report = (out / "public_data_gate.md").read_text(encoding="utf-8")
+    assert "config_not_found" in public_report
+    assert not (out / "quality_gate.json").exists()
 
 
 def test_run_public_data_gate_can_write_split_replays(tmp_path, capsys) -> None:
