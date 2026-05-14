@@ -127,6 +127,32 @@ Interpretation:
 - The partial positive alpha on 2 fills is not evidence of profitability.
 - The 24h gate remains open until the full recording completes and enough fills are observed across multiple configs.
 
+Additional 18h diagnostic replay on 2026-05-14 using the completed failed-duration recording:
+
+```powershell
+uv run --with "python-socketio[client]>=5" --with aiohttp ghost-amm run-public-data-gate `
+  --events data/raw/bitbank_btc_jpy_24h_20260512_234537*.jsonl `
+  --configs configs/default.yaml configs/diagnostic_controlled_churn.yaml `
+  --diagnostic-configs configs/diagnostic_relaxed_activation.yaml `
+  --out data/reports/bitbank_btc_jpy_18h_diagnostic_gate_20260514_2200 `
+  --min-recording-hours 18 `
+  --prevent-sleep
+```
+
+Result:
+
+- strict inspection passed: 18.43h, 508,079 events, 5 files, 0 sequence violations, ticker/trade/depth coverage present.
+- `configs/default.yaml`: 0 virtual orders, 0 fills, `strategy_alpha_pnl=0.0`.
+- `configs/diagnostic_controlled_churn.yaml`: 1,838 virtual orders, 2 fills, `strategy_alpha_pnl=+63.9374`, `fill_rate=0.001088`, `orders_per_minute=1.662`, `cancels_per_minute=1.661`.
+- `configs/diagnostic_relaxed_activation.yaml`: 49,405 virtual orders, 1 fill, `strategy_alpha_pnl=+6.84225`, very high churn at 44.67 orders/min and 44.67 cancels/min.
+- `quality_gate.json` failed as expected: default config had no fills/alpha, controlled churn had only 2 fills versus the 30-fill minimum.
+
+Interpretation:
+
+- The 18h data is useful for replay/regression testing and confirms the report path works on a large real recording.
+- It is not enough evidence of profitability: positive alpha appears only in diagnostic configs with 1-2 fills.
+- Keep the active 25h recording running; the pre-live gate still needs a full 24h+ recording and enough fills across quality-gate configs.
+
 ## Do Not Do Yet
 
 - Do not create a real live order submission path in this MVP.
