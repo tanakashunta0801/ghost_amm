@@ -63,10 +63,23 @@ Check whether an in-progress recording is still updating and currently replayabl
 uv run ghost-amm recording-status data/raw/bitbank_btc_jpy_1h.jsonl --strict --max-stale-sec 300
 ```
 
-For a 24h gate, include the minimum duration so partial recordings fail explicitly:
+For a 24h gate, use a 25h wall-clock recording buffer and still require a 24h inspected duration so partial recordings fail explicitly:
 
 ```powershell
-uv run ghost-amm recording-status data/raw/bitbank_btc_jpy_24h*.jsonl --strict --max-stale-sec 300 --min-duration-hours 24
+uv run --with "python-socketio[client]>=5" --with aiohttp ghost-amm record-bitbank-public `
+  --pair btc_jpy `
+  --config configs/default.yaml `
+  --out data/raw/bitbank_btc_jpy_25h.jsonl `
+  --timeout-sec 90000 `
+  --rotate-every-bytes 104857600 `
+  --flush-every-events 1 `
+  --max-reconnects 500 `
+  --reconnect-delay-sec 3 `
+  --heartbeat-interval-sec 60 `
+  --max-idle-sec 300 `
+  --prevent-sleep
+
+uv run ghost-amm recording-status data/raw/bitbank_btc_jpy_25h*.jsonl --strict --max-stale-sec 300 --min-duration-hours 24
 ```
 
 For strict channel coverage, including observed ticker and trade events:
@@ -97,10 +110,10 @@ After a long public recording finishes, run the public-data gate to inspect once
 
 ```powershell
 uv run ghost-amm run-public-data-gate `
-  --events data/raw/bitbank_btc_jpy_24h_20260512_234537*.jsonl `
+  --events data/raw/bitbank_btc_jpy_25h*.jsonl `
   --configs configs/default.yaml configs/diagnostic_controlled_churn.yaml `
   --diagnostic-configs configs/diagnostic_relaxed_activation.yaml `
-  --out data/reports/bitbank_btc_jpy_24h_gate `
+  --out data/reports/bitbank_btc_jpy_25h_gate `
   --require-min-duration-before-replay `
   --prevent-sleep
 ```
