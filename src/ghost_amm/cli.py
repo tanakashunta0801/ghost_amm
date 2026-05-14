@@ -643,6 +643,17 @@ def _md_value(value: object) -> str:
 def _run_public_data_gate(args: argparse.Namespace, *, prevent_sleep: dict) -> tuple[int, dict]:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
+    split_error = _validate_public_data_gate_split_args(args)
+    if split_error is not None:
+        payload = {
+            "ok": False,
+            "stage": "split_args",
+            "reason": split_error,
+            "prevent_sleep": prevent_sleep,
+            "out": str(out),
+        }
+        payload = _write_public_data_gate_output(out, payload)
+        return 1, payload
     inspection = inspect_recording(args.events, strict=args.strict)
     inspection_path = out / "recording_inspection.json"
     _write_json(inspection_path, inspection.to_dict())
@@ -878,6 +889,16 @@ def _run_public_data_gate(args: argparse.Namespace, *, prevent_sleep: dict) -> t
     }
     payload = _write_public_data_gate_output(out, payload)
     return (0 if quality.ok else 1), payload
+
+
+def _validate_public_data_gate_split_args(args: argparse.Namespace) -> str | None:
+    if args.split_parts < 0:
+        return "split_parts_negative"
+    if args.split_parts == 1:
+        return "split_parts_must_be_zero_or_at_least_2"
+    if args.split_diagnostic_configs and args.split_parts == 0:
+        return "split_diagnostic_configs_requires_split_parts"
+    return None
 
 
 def _expand_path_args(paths: list[str]) -> list[str]:

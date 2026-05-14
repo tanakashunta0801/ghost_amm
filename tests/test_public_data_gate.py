@@ -182,6 +182,33 @@ def test_run_public_data_gate_can_include_diagnostic_split_replays(tmp_path, cap
     assert (out / "split_02_diagnostic_01_default" / "summary.json").exists()
 
 
+def test_run_public_data_gate_fails_early_for_invalid_split_args(tmp_path, capsys) -> None:
+    recording = tmp_path / "recording.jsonl"
+    out = tmp_path / "gate"
+    write_jsonl(recording, _valid_split_recording_events())
+
+    code = main(
+        [
+            "run-public-data-gate",
+            "--events",
+            str(recording),
+            "--configs",
+            "configs/default.yaml",
+            "--out",
+            str(out),
+            "--split-diagnostic-configs",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 1
+    assert payload["stage"] == "split_args"
+    assert payload["reason"] == "split_diagnostic_configs_requires_split_parts"
+    assert (out / "public_data_gate.md").exists()
+    assert not (out / "recording_inspection.json").exists()
+    assert not (out / "01_default" / "summary.json").exists()
+
+
 def _valid_recording_events(*, include_ticker: bool = True, include_trade: bool = True):
     events = [
         pair_spec_event(fallback_btc_jpy_spec(), ts_ms=1000),
