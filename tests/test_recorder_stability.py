@@ -1,4 +1,8 @@
+import asyncio
+
 from ghost_amm.events import make_event
+from ghost_amm.events import read_jsonl
+from ghost_amm.recorder.bitbank_public_recorder import BitbankPublicRecorder
 from ghost_amm.recorder.inspection import inspect_recording
 from ghost_amm.recorder.jsonl_writer import RotatingJsonlEventWriter
 
@@ -10,6 +14,25 @@ def test_rotating_jsonl_writer_flushes_and_rotates(tmp_path) -> None:
             writer.write(make_event("bitbank_ticker", ts_exchange=idx, venue="bitbank", symbol="BTC/JPY", sequence=idx, payload={"last": idx}))
     assert [path.name for path in writer.paths] == ["recording.jsonl", "recording_0001.jsonl", "recording_0002.jsonl"]
     assert sum(1 for path in writer.paths for _ in path.open(encoding="utf-8")) == 5
+
+
+def test_bitbank_public_recorder_idle_watchdog_records_and_disconnects(tmp_path) -> None:
+    out = tmp_path / "idle.jsonl"
+    recorder = BitbankPublicRecorder(out=out, max_idle_sec=0.001)
+    done = asyncio.Event()
+    idle = asyncio.Event()
+    sio = _FakeSio()
+    last_message_ms = {"value": 1}
+
+    with RotatingJsonlEventWriter(out) as writer:
+        asyncio.run(recorder._idle_watchdog_loop(done, idle, sio, writer, reconnects=2, last_message_ms=last_message_ms))
+
+    events = read_jsonl(out)
+    assert idle.is_set()
+    assert sio.disconnected
+    assert events[-1].event_type == "risk_state"
+    assert events[-1].payload["reason"] == "recording_idle_timeout"
+    assert events[-1].payload["reconnects"] == 2
 
 
 def test_recording_inspection_requires_metadata_and_market_events(tmp_path) -> None:
@@ -164,3 +187,14 @@ def test_recording_inspection_fails_on_metadata_fetch_failure(tmp_path) -> None:
     assert not result.ok_for_replay
     assert result.metadata_fetch_failed
     assert result.reason == "metadata_fetch_failed"
+
+
+class _FakeSio:
+    connected = True
+
+    def __init__(self) -> None:
+        self.disconnected = False
+
+    async def disconnect(self) -> None:
+        self.disconnected = True
+        self.connected = False

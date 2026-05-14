@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 from urllib.parse import urlparse
 
 from ghost_amm.events import Event, make_event, now_ms
@@ -31,6 +31,7 @@ class BitbankPublicRecorder(EventRecorder):
         max_reconnects: int = 10,
         reconnect_delay_sec: float = 3.0,
         heartbeat_interval_sec: float | None = 60.0,
+        max_idle_sec: float | None = 300.0,
     ) -> None:
         self.pair = pair
         self.channels = list(channels or [f"ticker_{pair}", f"transactions_{pair}", f"depth_whole_{pair}", f"depth_diff_{pair}"])
@@ -47,6 +48,7 @@ class BitbankPublicRecorder(EventRecorder):
         self.max_reconnects = max_reconnects
         self.reconnect_delay_sec = reconnect_delay_sec
         self.heartbeat_interval_sec = heartbeat_interval_sec
+        self.max_idle_sec = max_idle_sec
         self.events: list[Event] = []
         self.output_paths: list[Path] = []
 
@@ -72,9 +74,12 @@ class BitbankPublicRecorder(EventRecorder):
                 if self.timeout_sec is not None and now_ms() - started_ms >= self.timeout_sec * 1000:
                     break
                 sio = socketio.AsyncClient(logger=False, engineio_logger=False, reconnection=False)
+                last_message_ms = {"value": now_ms()}
+                idle = asyncio.Event()
 
                 @sio.event
                 async def connect() -> None:
+                    last_message_ms["value"] = now_ms()
                     for channel in self.channels:
                         await sio.emit("join-room", channel)
                     self._record(
@@ -108,6 +113,7 @@ class BitbankPublicRecorder(EventRecorder):
                     room_name = str(data.get("room_name") or data.get("room") or "")
                     if not room_name:
                         return
+                    last_message_ms["value"] = now_ms()
                     for event in normalize_bitbank_message(room_name, data):
                         self._record(event, writer)
                     if self.max_events is not None and writer.total_events >= self.max_events:
@@ -116,14 +122,22 @@ class BitbankPublicRecorder(EventRecorder):
                 try:
                     await sio.connect(_socketio_base_url(self.url), transports=["websocket"])
                     heartbeat_task = asyncio.create_task(self._heartbeat_loop(done, writer, reconnects))
+                    idle_task = asyncio.create_task(self._idle_watchdog_loop(done, idle, sio, writer, reconnects, last_message_ms))
                     wait_timeout = None
                     if self.timeout_sec is not None:
                         elapsed_sec = (now_ms() - started_ms) / 1000
                         wait_timeout = max(self.timeout_sec - elapsed_sec, 0.001)
-                    if wait_timeout is None:
-                        await done.wait()
-                    else:
-                        await asyncio.wait_for(done.wait(), timeout=wait_timeout)
+                    wait_tasks = [asyncio.create_task(done.wait()), asyncio.create_task(idle.wait())]
+                    completed, pending = await asyncio.wait(wait_tasks, timeout=wait_timeout, return_when=asyncio.FIRST_COMPLETED)
+                    for task in pending:
+                        task.cancel()
+                    for task in pending:
+                        try:
+                            await task
+                        except asyncio.CancelledError:
+                            pass
+                    if not completed:
+                        raise asyncio.TimeoutError
                 except asyncio.TimeoutError:
                     break
                 except Exception as exc:
@@ -151,6 +165,13 @@ class BitbankPublicRecorder(EventRecorder):
                         except asyncio.CancelledError:
                             pass
                         del heartbeat_task
+                    if "idle_task" in locals():
+                        idle_task.cancel()
+                        try:
+                            await idle_task
+                        except asyncio.CancelledError:
+                            pass
+                        del idle_task
                     if sio.connected:
                         await sio.disconnect()
 
@@ -206,6 +227,47 @@ class BitbankPublicRecorder(EventRecorder):
                 ),
                 writer,
             )
+
+    async def _idle_watchdog_loop(
+        self,
+        done: asyncio.Event,
+        idle: asyncio.Event,
+        sio: Any,
+        writer: RotatingJsonlEventWriter,
+        reconnects: int,
+        last_message_ms: dict[str, int],
+    ) -> None:
+        max_idle_sec = self.max_idle_sec
+        if max_idle_sec is None or max_idle_sec <= 0:
+            return
+        check_interval = max(0.001, min(max_idle_sec / 2, 30.0))
+        while not done.is_set() and not idle.is_set():
+            await asyncio.sleep(check_interval)
+            idle_ms = now_ms() - last_message_ms["value"]
+            if idle_ms < max_idle_sec * 1000:
+                continue
+            self._record(
+                make_event(
+                    "risk_state",
+                    ts_exchange=now_ms(),
+                    venue="bitbank",
+                    symbol=self.pair.upper().replace("_", "/"),
+                    payload={
+                        "allow_quote": False,
+                        "allow_buy": False,
+                        "allow_sell": False,
+                        "reason": "recording_idle_timeout",
+                        "idle_ms": idle_ms,
+                        "max_idle_sec": max_idle_sec,
+                        "reconnects": reconnects,
+                    },
+                ),
+                writer,
+            )
+            idle.set()
+            if getattr(sio, "connected", False):
+                await sio.disconnect()
+            return
 
     def _metadata_events(self) -> list[Event]:
         ts = now_ms()

@@ -45,10 +45,11 @@ uv run --with "python-socketio[client]>=5" --with aiohttp ghost-amm record-bitba
   --flush-every-events 1 `
   --max-reconnects 100 `
   --heartbeat-interval-sec 60 `
+  --max-idle-sec 300 `
   --prevent-sleep
 ```
 
-On Windows, `--prevent-sleep` requests the OS to keep the system awake for the recording process. It cannot protect against lid-close sleep policy, power loss, shutdown, or network loss. Periodic `dry_run_heartbeat` events make long recordings easier to inspect for stalls.
+On Windows, `--prevent-sleep` requests the OS to keep the system awake for the recording process. It cannot protect against lid-close sleep policy, power loss, shutdown, or network loss. Periodic `dry_run_heartbeat` events make long recordings easier to inspect for stalls. If market messages stop for `--max-idle-sec`, the recorder records `recording_idle_timeout` and reconnects.
 
 Inspect the recording before replay:
 

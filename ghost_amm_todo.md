@@ -43,6 +43,7 @@ uv run --extra test pytest -q
 - Quality gate: `evaluate-quality-gate` fails closed unless inspection duration, fills, alpha, and churn thresholds pass across multiple reports.
 - Long recording support: `record-bitbank-public --prevent-sleep` keeps Windows awake during the recording process when the OS allows it.
 - Long recording observability: `record-bitbank-public --heartbeat-interval-sec` emits periodic heartbeat events for stall diagnostics.
+- Long recording idle watchdog: `record-bitbank-public --max-idle-sec` reconnects when market messages stop arriving while the process is still alive.
 - Recording monitor: `recording-status` reports file freshness, strict inspection status, and stale recording failures.
 - Public data gate runner: `run-public-data-gate` inspects a recording once, replays multiple configs, writes per-config reports, and evaluates `quality_gate.json`.
 - CLI event inputs expand wildcards internally, so rotated JSONL sets like `data/raw/bitbank_btc_jpy_24h_*.jsonl` work in PowerShell.
@@ -54,13 +55,14 @@ uv run --extra test pytest -q
 
 ## In Progress
 
-- Active 24h public recording is running locally for `btc_jpy`.
-- Recording output: `data/raw/bitbank_btc_jpy_24h_20260512_234537.jsonl`.
-- Started: 2026-05-12 23:45:37 JST. Expected completion: around 2026-05-13 23:45 JST.
-- Last checked: 2026-05-13 12:16 JST, duration 12.51h, 318.2MB across 4 rotated JSONL files, strict recording status `ok_for_replay=true`, stale `false`, sequence violations 0, max event gap 3.3s, duration gate `12.51<24h`.
-- Sleep concern checked on 2026-05-13 12:19 JST: `powercfg /requests` showed the recording Python process under `SYSTEM`, Windows sleep/resume events were not found for the recording window, and JSONL continued updating. Display sleep/lock may occur, but system sleep was still being prevented.
-- Completion watcher v5 is running locally and should run `run-public-data-gate --require-min-duration-before-replay --prevent-sleep` with `configs/default.yaml` and `configs/diagnostic_controlled_churn.yaml` as quality-gate configs, plus `configs/diagnostic_relaxed_activation.yaml` as a diagnostic replay after the 24h recorder exits.
-- Expected gate output: `data/reports/bitbank_btc_jpy_24h_gate_20260512_234537`.
+- No active 24h recorder is currently running.
+- The latest 24h attempt started on 2026-05-12 23:45:37 JST and the watcher observed process exit on 2026-05-13 23:45:56 JST.
+- Recording output: `data/raw/bitbank_btc_jpy_24h_20260512_234537*.jsonl`.
+- Result checked on 2026-05-14 20:44 JST: strict inspection passed, but effective event duration was only 18.43h across 5 rotated JSONL files, so the 24h duration gate failed.
+- Gate output: `data/reports/bitbank_btc_jpy_24h_gate_20260512_234537/public_data_gate.json`.
+- Gate result: `stage=recording_duration`, `reason=recording_duration_below_min:18.433658333333334<24.0`; replay and quality gate reports were intentionally not generated.
+- Root cause candidate: the recorder process lived until the 24h timeout, but market events stopped around 18.43h. Add/use `--max-idle-sec 300` before the next 24h attempt so idle sockets reconnect instead of waiting until timeout.
+- Sleep concern checked on 2026-05-13 12:19 JST: `powercfg /requests` showed the recording Python process under `SYSTEM`, Windows sleep/resume events were not found for the recording window, and JSONL continued updating at that time. The later 18.43h stop means the 24h public data gate still needs a fresh recording attempt.
 - No remaining code-only TODO is currently in progress; the active gate is real public data collection and validation.
 
 ## Pending Real-Data Gates
@@ -141,6 +143,7 @@ uv run --with "python-socketio[client]>=5" --with aiohttp ghost-amm record-bitba
   --flush-every-events 1 `
   --max-reconnects 100 `
   --heartbeat-interval-sec 60 `
+  --max-idle-sec 300 `
   --prevent-sleep
 ```
 
