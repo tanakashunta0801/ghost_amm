@@ -55,14 +55,14 @@ uv run --extra test pytest -q
 
 ## In Progress
 
-- No active 24h recorder is currently running.
-- The latest 24h attempt started on 2026-05-12 23:45:37 JST and the watcher observed process exit on 2026-05-13 23:45:56 JST.
-- Recording output: `data/raw/bitbank_btc_jpy_24h_20260512_234537*.jsonl`.
-- Result checked on 2026-05-14 20:44 JST: strict inspection passed, but effective event duration was only 18.43h across 5 rotated JSONL files, so the 24h duration gate failed.
-- Gate output: `data/reports/bitbank_btc_jpy_24h_gate_20260512_234537/public_data_gate.json`.
-- Gate result: `stage=recording_duration`, `reason=recording_duration_below_min:18.433658333333334<24.0`; replay and quality gate reports were intentionally not generated.
-- Root cause candidate: the recorder process lived until the 24h timeout, but market events stopped around 18.43h. Add/use `--max-idle-sec 300` before the next 24h attempt so idle sockets reconnect instead of waiting until timeout.
-- Sleep concern checked on 2026-05-13 12:19 JST: `powercfg /requests` showed the recording Python process under `SYSTEM`, Windows sleep/resume events were not found for the recording window, and JSONL continued updating at that time. The later 18.43h stop means the 24h public data gate still needs a fresh recording attempt.
+- Active 25h buffered public recording is running locally for `btc_jpy`.
+- Recording output: `data/raw/bitbank_btc_jpy_25h_retry_20260514_204916*.jsonl`.
+- Started: 2026-05-14 20:49:16 JST. Expected completion: around 2026-05-15 21:49 JST.
+- This retry uses `--max-idle-sec 300`, `--max-reconnects 500`, `--heartbeat-interval-sec 60`, and `--prevent-sleep`.
+- Last checked: 2026-05-14 20:51 JST, duration 0.03h, strict recording status `ok_for_replay=true`, stale `false`, sequence violations 0, duration gate `0.03<24h`.
+- Completion watcher is running locally and should run `run-public-data-gate --require-min-duration-before-replay --prevent-sleep` after the 25h recorder exits.
+- Expected gate output: `data/reports/bitbank_btc_jpy_25h_retry_20260514_204916_gate`.
+- Previous 24h attempt `data/raw/bitbank_btc_jpy_24h_20260512_234537*.jsonl` failed the duration gate at 18.43h. Root cause candidate: the recorder process lived until the 24h timeout, but market events stopped around 18.43h; idle watchdog was added before this retry.
 - No remaining code-only TODO is currently in progress; the active gate is real public data collection and validation.
 
 ## Pending Real-Data Gates
