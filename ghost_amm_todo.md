@@ -187,6 +187,13 @@ Interpretation:
 - Do not treat the sweep best as optimized; it is in-sample over 18.43h and only 3 fills. Use it as a candidate diagnostic row after the 24h+ gate, not as live evidence.
 - The sweep best was materialized as `configs/diagnostic_low_churn_18h_candidate.yaml` and verified on the same 18h recording: 506 virtual orders, 3 fills, `strategy_alpha_pnl=+128.5144`, `orders_per_minute=0.4575`, `cancels_per_minute=0.4557`.
 
+Split-period sanity check for `configs/diagnostic_low_churn_18h_candidate.yaml`:
+
+- Generated ignored split files from the 18.43h recording with metadata timestamps aligned to each split: `data/raw/bitbank_btc_jpy_18h_20260512_234537_first_half_clean.jsonl` and `data/raw/bitbank_btc_jpy_18h_20260512_234537_second_half_clean.jsonl`.
+- First half: 9.22h, 254,880 events, strict inspection passed, 180 virtual orders, 3 fills, `strategy_alpha_pnl=+22.7728`, `orders_per_minute=0.3255`, `cancels_per_minute=0.3183`.
+- Second half: 9.22h, 253,201 events, strict inspection passed, 332 virtual orders, 1 fill, `strategy_alpha_pnl=+33.88225`, `orders_per_minute=0.6004`, `cancels_per_minute=0.5985`.
+- Interpretation: the low-churn candidate did not completely collapse out-of-sample across the half split, but the evidence is still too thin because the second half has only 1 fill and the full 18h sample has only 3 fills.
+
 ## Do Not Do Yet
 
 - Do not create a real live order submission path in this MVP.
