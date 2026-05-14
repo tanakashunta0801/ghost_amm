@@ -21,6 +21,7 @@ from ghost_amm.exchange.ccxt_gateway import CcxtGateway, CcxtGatewayBlocked, Ccx
 from ghost_amm.recorder.bitbank_public_recorder import BitbankPublicRecorder
 from ghost_amm.recorder.inspection import inspect_recording
 from ghost_amm.recorder.mock_recorder import generate_synthetic_events
+from ghost_amm.recorder.split import DEFAULT_METADATA_EVENT_TYPES, split_recording_by_time
 from ghost_amm.recorder.status import recording_status
 from ghost_amm.replay.engine import ReplayEngine
 from ghost_amm.system_sleep import SystemSleepPreventer
@@ -99,6 +100,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--max-stale-sec", type=float, default=300.0)
     p.add_argument("--min-duration-hours", type=float, default=None)
     p.add_argument("--no-inspect", action="store_true")
+
+    p = sub.add_parser("split-recording")
+    p.add_argument("--events", required=True, nargs="+")
+    p.add_argument("--out-prefix", required=True)
+    p.add_argument("--parts", type=int, default=2)
+    p.add_argument("--metadata-event-types", default=",".join(DEFAULT_METADATA_EVENT_TYPES))
 
     p = sub.add_parser("validate-public-recording")
     p.add_argument("--events", required=True, nargs="+")
@@ -320,6 +327,21 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(json.dumps(result.to_dict(), ensure_ascii=False, sort_keys=True))
         return 0 if result.ok else 1
+
+    if args.command == "split-recording":
+        metadata_event_types = [item.strip() for item in args.metadata_event_types.split(",") if item.strip()]
+        try:
+            result = split_recording_by_time(
+                args.events,
+                out_prefix=args.out_prefix,
+                parts=args.parts,
+                metadata_event_types=metadata_event_types,
+            )
+        except ValueError as exc:
+            print(json.dumps({"ok": False, "reason": str(exc)}, ensure_ascii=False, sort_keys=True))
+            return 1
+        print(json.dumps({"ok": True, **result.to_dict()}, ensure_ascii=False, sort_keys=True))
+        return 0
 
     if args.command == "validate-public-recording":
         config = load_config(args.config)

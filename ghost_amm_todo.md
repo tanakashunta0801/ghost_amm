@@ -52,6 +52,7 @@ uv run --extra test pytest -q
 - Public data gate runner supports `--require-min-duration-before-replay`, so early recorder exits stop before expensive multi-config replay.
 - Quality gate writes `quality_gate.md` alongside JSON so pass/fail, alpha, fills, and churn are reviewable without parsing JSON.
 - Public data gate runner supports `--diagnostic-configs`, so high-churn diagnostic replays are generated without counting against the quality gate.
+- Recording split helper: `split-recording` creates time-based replay splits with metadata copied and timestamp-adjusted for split-period sanity checks.
 
 ## In Progress
 
@@ -190,6 +191,7 @@ Interpretation:
 Split-period sanity check for `configs/diagnostic_low_churn_18h_candidate.yaml`:
 
 - Generated ignored split files from the 18.43h recording with metadata timestamps aligned to each split: `data/raw/bitbank_btc_jpy_18h_20260512_234537_first_half_clean.jsonl` and `data/raw/bitbank_btc_jpy_18h_20260512_234537_second_half_clean.jsonl`.
+- Added and smoke-tested reusable `split-recording` CLI on the same 18.43h files, producing `data/raw/bitbank_btc_jpy_18h_20260512_234537_cli_split_01.jsonl` and `data/raw/bitbank_btc_jpy_18h_20260512_234537_cli_split_02.jsonl`.
 - First half: 9.22h, 254,880 events, strict inspection passed, 180 virtual orders, 3 fills, `strategy_alpha_pnl=+22.7728`, `orders_per_minute=0.3255`, `cancels_per_minute=0.3183`.
 - Second half: 9.22h, 253,201 events, strict inspection passed, 332 virtual orders, 1 fill, `strategy_alpha_pnl=+33.88225`, `orders_per_minute=0.6004`, `cancels_per_minute=0.5985`.
 - Interpretation: the low-churn candidate did not completely collapse out-of-sample across the half split, but the evidence is still too thin because the second half has only 1 fill and the full 18h sample has only 3 fills.
@@ -262,6 +264,15 @@ uv run ghost-amm evaluate-quality-gate `
   --summary data/reports/bitbank_btc_jpy_24h_config_a/summary.json data/reports/bitbank_btc_jpy_24h_config_b/summary.json `
   --recording-inspection data/reports/bitbank_btc_jpy_24h_config_a/recording_inspection.json `
   --out data/reports/bitbank_btc_jpy_24h_quality_gate.json
+```
+
+Split-period validation files:
+
+```powershell
+uv run ghost-amm split-recording `
+  --events data/raw/bitbank_btc_jpy_25h*.jsonl `
+  --out-prefix data/raw/bitbank_btc_jpy_25h_split `
+  --parts 2
 ```
 
 One-shot 24h public data gate:

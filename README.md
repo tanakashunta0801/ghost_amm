@@ -121,6 +121,15 @@ uv run ghost-amm run-public-data-gate `
 The command writes `recording_inspection.json`, one replay report directory per quality-gate config, optional diagnostic replay directories, `quality_gate.json`, `quality_gate.md`, and `public_data_gate.json`. It exits non-zero unless strict recording inspection and the configured quality thresholds pass.
 The CLI expands `--events` wildcards itself, so the `*.jsonl` form works in PowerShell. `--require-min-duration-before-replay` stops before replay if the recording is shorter than the quality-gate minimum. On Windows, `--prevent-sleep` keeps the system awake during the post-recording replay and quality-gate pass.
 
+For split-period sanity checks, create time-based replay files with metadata copied to each split:
+
+```powershell
+uv run ghost-amm split-recording `
+  --events data/raw/bitbank_btc_jpy_25h*.jsonl `
+  --out-prefix data/raw/bitbank_btc_jpy_25h_split `
+  --parts 2
+```
+
 ## External Fair Price Events
 
 Replay can consume `external_fair_price` events as an additional robust-fair source. A CCXT public ticker snapshot can be converted to one JSONL event by combining BTC/USD and USD/JPY:
