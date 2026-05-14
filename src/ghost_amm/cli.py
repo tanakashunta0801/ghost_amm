@@ -144,6 +144,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--max-cancels-per-minute", type=float, default=10.0)
     p.add_argument("--require-min-duration-before-replay", action=argparse.BooleanOptionalAction, default=False)
     p.add_argument("--prevent-sleep", action="store_true")
+    p.add_argument("--split-parts", type=int, default=0)
 
     p = sub.add_parser("analyze-risk-blocks")
     p.add_argument("--events", required=True, nargs="+")
@@ -617,15 +618,88 @@ def _run_public_data_gate(args: argparse.Namespace, *, prevent_sleep: dict) -> t
                 "strict_sequence": engine.last_strict_sequence,
             }
         )
+    quality_path = out / "quality_gate.json"
+    quality_report_path = out / "quality_gate.md"
     quality = evaluate_quality_gate(
         summary_paths=summary_paths,
         recording_inspection_path=inspection_path,
         thresholds=_quality_gate_thresholds(args),
     )
-    quality_path = out / "quality_gate.json"
-    quality_report_path = out / "quality_gate.md"
     write_quality_gate_result(quality_path, quality)
     write_quality_gate_markdown(quality_report_path, quality)
+    recording_splits = None
+    split_replays = []
+    if args.split_parts:
+        try:
+            split_result = split_recording_by_time(
+                args.events,
+                out_prefix=out / "recording_splits" / "recording_split",
+                parts=args.split_parts,
+            )
+        except ValueError as exc:
+            payload = {
+                "ok": False,
+                "stage": "split_recording",
+                "reason": str(exc),
+                "recording_inspection": str(inspection_path),
+                "quality_gate": str(quality_path),
+                "quality_gate_report": str(quality_report_path),
+                "replays": replay_results,
+                "diagnostic_replays": diagnostic_replays,
+                "quality_failures": quality.failures,
+                "prevent_sleep": prevent_sleep,
+                "out": str(out),
+            }
+            _write_json(out / "public_data_gate.json", payload)
+            return 1, payload
+        recording_splits = split_result.to_dict()
+        for split in split_result.splits:
+            for config_index, config_path in enumerate(args.configs, start=1):
+                cfg_path = Path(config_path)
+                run_out = out / f"split_{split.index:02d}_{config_index:02d}_{cfg_path.stem}"
+                engine = ReplayEngine(load_config(cfg_path))
+                try:
+                    output = engine.run_files(
+                        [split.path],
+                        run_out,
+                        replay_order=args.replay_order,
+                        strict_sequence=args.strict_sequence,
+                    )
+                except ValueError as exc:
+                    payload = {
+                        "ok": False,
+                        "stage": "split_replay",
+                        "reason": str(exc),
+                        "config": str(cfg_path),
+                        "split": split.path,
+                        "out": str(run_out),
+                        "recording_inspection": str(inspection_path),
+                        "quality_gate": str(quality_path),
+                        "quality_gate_report": str(quality_report_path),
+                        "replays": replay_results,
+                        "diagnostic_replays": diagnostic_replays,
+                        "recording_splits": recording_splits,
+                        "quality_failures": quality.failures,
+                        "prevent_sleep": prevent_sleep,
+                    }
+                    _write_json(out / "public_data_gate.json", payload)
+                    return 1, payload
+                summary_path = run_out / "summary.json"
+                split_replays.append(
+                    {
+                        "config": str(cfg_path),
+                        "role": "split_sanity",
+                        "split_index": split.index,
+                        "split": split.path,
+                        "out": str(run_out),
+                        "summary": str(summary_path),
+                        "events": len(output),
+                        "virtual_orders": sum(1 for event in output if event.event_type == "virtual_order_placed"),
+                        "virtual_fills": sum(1 for event in output if event.event_type == "virtual_fill"),
+                        "replay_order": engine.last_replay_order,
+                        "strict_sequence": engine.last_strict_sequence,
+                    }
+                )
     payload = {
         "ok": quality.ok,
         "recording_inspection": str(inspection_path),
@@ -633,6 +707,8 @@ def _run_public_data_gate(args: argparse.Namespace, *, prevent_sleep: dict) -> t
         "quality_gate_report": str(quality_report_path),
         "replays": replay_results,
         "diagnostic_replays": diagnostic_replays,
+        "recording_splits": recording_splits,
+        "split_replays": split_replays,
         "quality_failures": quality.failures,
         "prevent_sleep": prevent_sleep,
         "out": str(out),

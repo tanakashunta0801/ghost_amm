@@ -53,6 +53,7 @@ uv run --extra test pytest -q
 - Quality gate writes `quality_gate.md` alongside JSON so pass/fail, alpha, fills, and churn are reviewable without parsing JSON.
 - Public data gate runner supports `--diagnostic-configs`, so high-churn diagnostic replays are generated without counting against the quality gate.
 - Recording split helper: `split-recording` creates time-based replay splits with metadata copied and timestamp-adjusted for split-period sanity checks.
+- Public data gate runner supports `--split-parts`, so split-period sanity replay reports can be generated with the main gate output.
 
 ## In Progress
 
@@ -196,6 +197,8 @@ Split-period sanity check for `configs/diagnostic_low_churn_18h_candidate.yaml`:
 - First half: 9.22h, 254,880 events, strict inspection passed, 180 virtual orders, 3 fills, `strategy_alpha_pnl=+22.7728`, `orders_per_minute=0.3255`, `cancels_per_minute=0.3183`.
 - Second half: 9.22h, 253,201 events, strict inspection passed, 332 virtual orders, 1 fill, `strategy_alpha_pnl=+33.88225`, `orders_per_minute=0.6004`, `cancels_per_minute=0.5985`.
 - Interpretation: the low-churn candidate did not completely collapse out-of-sample across the half split, but the evidence is still too thin because the second half has only 1 fill and the full 18h sample has only 3 fills.
+- Added and smoke-tested `run-public-data-gate --split-parts 2` on the same 18.43h files, writing split files and split sanity replay reports under `data/reports/bitbank_btc_jpy_18h_split_gate_smoke_20260514_2310`.
+- The split gate smoke reproduced the full-sample low-churn result of 506 virtual orders and 3 fills, plus split sanity replays with first-half 180 orders / 3 fills and second-half 332 orders / 1 fill. The quality gate still failed as expected because one quality config is below `min_report_count=2` and 3 fills is below the 30-fill minimum.
 
 ## Do Not Do Yet
 
@@ -285,7 +288,8 @@ uv run ghost-amm run-public-data-gate `
   --diagnostic-configs configs/diagnostic_relaxed_activation.yaml configs/diagnostic_low_churn_18h_candidate.yaml `
   --out data/reports/bitbank_btc_jpy_25h_gate `
   --require-min-duration-before-replay `
-  --prevent-sleep
+  --prevent-sleep `
+  --split-parts 2
 ```
 
 ## Pre-Live Completion Gates
