@@ -200,10 +200,10 @@ One-shot 24h public data gate:
 
 ```powershell
 uv run ghost-amm run-public-data-gate `
-  --events data/raw/bitbank_btc_jpy_24h_20260512_234537*.jsonl `
+  --events data/raw/bitbank_btc_jpy_25h*.jsonl `
   --configs configs/default.yaml configs/diagnostic_controlled_churn.yaml `
   --diagnostic-configs configs/diagnostic_relaxed_activation.yaml `
-  --out data/reports/bitbank_btc_jpy_24h_gate `
+  --out data/reports/bitbank_btc_jpy_25h_gate `
   --require-min-duration-before-replay `
   --prevent-sleep
 ```
