@@ -594,12 +594,12 @@ def _append_replay_table(lines: list[str], title: str, replays: list) -> None:
             "",
             f"## {title}",
             "",
-            "| Role | Config | Alpha PnL | Orders | Fills | Fill Rate | Orders/min | Cancels/min | Out |",
-            "|---|---|---:|---:|---:|---:|---:|---:|---|",
+            "| Role | Config | Alpha PnL | Orders | Fills | Fill Rate | Orders/min | Cancels/min | Spread Captured | Adverse 5s | Risk Blocks | Out |",
+            "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
         ]
     )
     if not replays:
-        lines.append("| None |  |  |  |  |  |  |  |  |")
+        lines.append("| None |  |  |  |  |  |  |  |  |  |  |  |")
         return
     for item in replays:
         if not isinstance(item, dict):
@@ -609,7 +609,7 @@ def _append_replay_table(lines: list[str], title: str, replays: list) -> None:
         if item.get("split_index") is not None:
             role = f"{role}:split_{item.get('split_index')}"
         lines.append(
-            "| {role} | `{config}` | {alpha} | {orders} | {fills} | {fill_rate} | {orders_per_minute} | {cancels_per_minute} | `{out}` |".format(
+            "| {role} | `{config}` | {alpha} | {orders} | {fills} | {fill_rate} | {orders_per_minute} | {cancels_per_minute} | {spread} | {adverse_5s} | {risk_blocks} | `{out}` |".format(
                 role=_md_value(role),
                 config=_md_value(item.get("config")),
                 alpha=_md_value(summary.get("strategy_alpha_pnl")),
@@ -618,6 +618,9 @@ def _append_replay_table(lines: list[str], title: str, replays: list) -> None:
                 fill_rate=_md_value(summary.get("fill_rate")),
                 orders_per_minute=_md_value(summary.get("orders_per_minute")),
                 cancels_per_minute=_md_value(summary.get("cancels_per_minute")),
+                spread=_md_value(summary.get("average_spread_captured")),
+                adverse_5s=_md_value(summary.get("average_adverse_5s")),
+                risk_blocks=_md_value(summary.get("risk_blocked_quote_count")),
                 out=_md_value(item.get("out")),
             )
         )

@@ -54,7 +54,7 @@ uv run --extra test pytest -q
 - Public data gate runner supports `--diagnostic-configs`, so high-churn diagnostic replays are generated without counting against the quality gate.
 - Recording split helper: `split-recording` creates time-based replay splits with metadata copied and timestamp-adjusted for split-period sanity checks.
 - Public data gate runner supports `--split-parts` and `--split-diagnostic-configs`, so split-period sanity replay reports can be generated with the main gate output, including diagnostic configs when requested.
-- Public data gate runner writes `public_data_gate.md`, so recording status, quality replays, diagnostic replays, split sanity replays, and output paths are reviewable without parsing JSON.
+- Public data gate runner writes `public_data_gate.md`, so recording status, alpha, fills, churn, spread capture, adverse selection, risk blocks, quality replays, diagnostic replays, split sanity replays, and output paths are reviewable without parsing JSON.
 - Public data gate runner fails closed before inspection/replay on invalid split options such as `--split-parts 1` or `--split-diagnostic-configs` without `--split-parts`.
 
 ## In Progress

@@ -52,6 +52,9 @@ def test_run_public_data_gate_writes_inspection_replays_and_quality_gate(tmp_pat
     assert "Status: FAIL" in public_report
     assert "## Quality Replays" in public_report
     assert "## Diagnostic Replays" in public_report
+    assert "Spread Captured" in public_report
+    assert "Adverse 5s" in public_report
+    assert "Risk Blocks" in public_report
     assert any(failure.startswith("recording_duration_below_min:") for failure in payload["quality_failures"])
 
 
