@@ -59,7 +59,8 @@ uv run --extra test pytest -q
 - Recording output: `data/raw/bitbank_btc_jpy_25h_retry_20260514_204916*.jsonl`.
 - Started: 2026-05-14 20:49:16 JST. Expected completion: around 2026-05-15 21:49 JST.
 - This retry uses `--max-idle-sec 300`, `--max-reconnects 500`, `--heartbeat-interval-sec 60`, and `--prevent-sleep`.
-- Last checked: 2026-05-14 20:51 JST, duration 0.03h, strict recording status `ok_for_replay=true`, stale `false`, sequence violations 0, duration gate `0.03<24h`.
+- Last checked: 2026-05-14 20:55 JST, duration 0.11h, strict recording status `ok_for_replay=true`, stale `false`, sequence violations 0, duration gate `0.11<24h`.
+- `powercfg /requests` shows a `SYSTEM` request from the uv-managed Python recorder process, so `--prevent-sleep` is active while the process is alive.
 - Completion watcher is running locally and should run `run-public-data-gate --require-min-duration-before-replay --prevent-sleep` after the 25h recorder exits.
 - Expected gate output: `data/reports/bitbank_btc_jpy_25h_retry_20260514_204916_gate`.
 - Previous 24h attempt `data/raw/bitbank_btc_jpy_24h_20260512_234537*.jsonl` failed the duration gate at 18.43h. Root cause candidate: the recorder process lived until the 24h timeout, but market events stopped around 18.43h; idle watchdog was added before this retry.
@@ -164,26 +165,28 @@ uv run ghost-amm validate-public-recording `
   --out data/reports/bitbank_btc_jpy_10m
 ```
 
-24h recording gate:
+25h buffered recording for the 24h gate:
 
 ```powershell
 uv run --with "python-socketio[client]>=5" --with aiohttp ghost-amm record-bitbank-public `
   --pair btc_jpy `
   --config configs/default.yaml `
-  --out data/raw/bitbank_btc_jpy_24h.jsonl `
-  --timeout-sec 86400 `
+  --out data/raw/bitbank_btc_jpy_25h.jsonl `
+  --timeout-sec 90000 `
   --rotate-every-bytes 104857600 `
   --flush-every-events 1 `
-  --max-reconnects 100 `
+  --max-reconnects 500 `
+  --reconnect-delay-sec 3 `
   --heartbeat-interval-sec 60 `
+  --max-idle-sec 300 `
   --prevent-sleep
 
 uv run ghost-amm validate-public-recording `
-  --events data/raw/bitbank_btc_jpy_24h.jsonl `
+  --events data/raw/bitbank_btc_jpy_25h*.jsonl `
   --config configs/default.yaml `
   --out data/reports/bitbank_btc_jpy_24h
 
-uv run ghost-amm recording-status data/raw/bitbank_btc_jpy_24h*.jsonl --strict --max-stale-sec 300 --min-duration-hours 24
+uv run ghost-amm recording-status data/raw/bitbank_btc_jpy_25h*.jsonl --strict --max-stale-sec 300 --min-duration-hours 24
 
 uv run ghost-amm evaluate-quality-gate `
   --summary data/reports/bitbank_btc_jpy_24h_config_a/summary.json data/reports/bitbank_btc_jpy_24h_config_b/summary.json `
