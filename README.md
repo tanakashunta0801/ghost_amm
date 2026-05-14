@@ -112,7 +112,7 @@ After a long public recording finishes, run the public-data gate to inspect once
 uv run ghost-amm run-public-data-gate `
   --events data/raw/bitbank_btc_jpy_25h*.jsonl `
   --configs configs/default.yaml configs/diagnostic_controlled_churn.yaml `
-  --diagnostic-configs configs/diagnostic_relaxed_activation.yaml `
+  --diagnostic-configs configs/diagnostic_relaxed_activation.yaml configs/diagnostic_low_churn_18h_candidate.yaml `
   --out data/reports/bitbank_btc_jpy_25h_gate `
   --require-min-duration-before-replay `
   --prevent-sleep

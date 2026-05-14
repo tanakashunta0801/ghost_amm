@@ -185,6 +185,7 @@ Interpretation:
 - Lowering churn limits can reduce order spam without reducing the tiny observed fill count.
 - Lowering shock threshold to 0.03 did not improve this sample.
 - Do not treat the sweep best as optimized; it is in-sample over 18.43h and only 3 fills. Use it as a candidate diagnostic row after the 24h+ gate, not as live evidence.
+- The sweep best was materialized as `configs/diagnostic_low_churn_18h_candidate.yaml` and verified on the same 18h recording: 506 virtual orders, 3 fills, `strategy_alpha_pnl=+128.5144`, `orders_per_minute=0.4575`, `cancels_per_minute=0.4557`.
 
 ## Do Not Do Yet
 
@@ -262,7 +263,7 @@ One-shot 24h public data gate:
 uv run ghost-amm run-public-data-gate `
   --events data/raw/bitbank_btc_jpy_25h*.jsonl `
   --configs configs/default.yaml configs/diagnostic_controlled_churn.yaml `
-  --diagnostic-configs configs/diagnostic_relaxed_activation.yaml `
+  --diagnostic-configs configs/diagnostic_relaxed_activation.yaml configs/diagnostic_low_churn_18h_candidate.yaml `
   --out data/reports/bitbank_btc_jpy_25h_gate `
   --require-min-duration-before-replay `
   --prevent-sleep
