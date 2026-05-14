@@ -145,6 +145,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--require-min-duration-before-replay", action=argparse.BooleanOptionalAction, default=False)
     p.add_argument("--prevent-sleep", action="store_true")
     p.add_argument("--split-parts", type=int, default=0)
+    p.add_argument("--split-diagnostic-configs", action="store_true")
 
     p = sub.add_parser("analyze-risk-blocks")
     p.add_argument("--events", required=True, nargs="+")
@@ -653,10 +654,18 @@ def _run_public_data_gate(args: argparse.Namespace, *, prevent_sleep: dict) -> t
             _write_json(out / "public_data_gate.json", payload)
             return 1, payload
         recording_splits = split_result.to_dict()
+        split_configs: list[tuple[str, str, int]] = [
+            ("quality_gate", config_path, index) for index, config_path in enumerate(args.configs, start=1)
+        ]
+        if args.split_diagnostic_configs:
+            split_configs.extend(
+                ("diagnostic", config_path, index) for index, config_path in enumerate(args.diagnostic_configs, start=1)
+            )
         for split in split_result.splits:
-            for config_index, config_path in enumerate(args.configs, start=1):
+            for source_role, config_path, config_index in split_configs:
                 cfg_path = Path(config_path)
-                run_out = out / f"split_{split.index:02d}_{config_index:02d}_{cfg_path.stem}"
+                role_prefix = f"{source_role}_" if args.split_diagnostic_configs else ""
+                run_out = out / f"split_{split.index:02d}_{role_prefix}{config_index:02d}_{cfg_path.stem}"
                 engine = ReplayEngine(load_config(cfg_path))
                 try:
                     output = engine.run_files(
@@ -671,6 +680,7 @@ def _run_public_data_gate(args: argparse.Namespace, *, prevent_sleep: dict) -> t
                         "stage": "split_replay",
                         "reason": str(exc),
                         "config": str(cfg_path),
+                        "source_role": source_role,
                         "split": split.path,
                         "out": str(run_out),
                         "recording_inspection": str(inspection_path),
@@ -689,6 +699,7 @@ def _run_public_data_gate(args: argparse.Namespace, *, prevent_sleep: dict) -> t
                     {
                         "config": str(cfg_path),
                         "role": "split_sanity",
+                        "source_role": source_role,
                         "split_index": split.index,
                         "split": split.path,
                         "out": str(run_out),

@@ -116,10 +116,11 @@ uv run ghost-amm run-public-data-gate `
   --out data/reports/bitbank_btc_jpy_25h_gate `
   --require-min-duration-before-replay `
   --prevent-sleep `
-  --split-parts 2
+  --split-parts 2 `
+  --split-diagnostic-configs
 ```
 
-The command writes `recording_inspection.json`, one replay report directory per quality-gate config, optional diagnostic replay directories, optional split-period replay directories, `quality_gate.json`, `quality_gate.md`, and `public_data_gate.json`. It exits non-zero unless strict recording inspection and the configured quality thresholds pass.
+The command writes `recording_inspection.json`, one replay report directory per quality-gate config, optional diagnostic replay directories, optional split-period replay directories, `quality_gate.json`, `quality_gate.md`, and `public_data_gate.json`. `--split-diagnostic-configs` includes diagnostic configs in the split-period sanity replays without counting them toward the quality gate. It exits non-zero unless strict recording inspection and the configured quality thresholds pass.
 The CLI expands `--events` wildcards itself, so the `*.jsonl` form works in PowerShell. `--require-min-duration-before-replay` stops before replay if the recording is shorter than the quality-gate minimum. On Windows, `--prevent-sleep` keeps the system awake during the post-recording replay and quality-gate pass.
 
 For split-period sanity checks, create time-based replay files with metadata copied to each split:

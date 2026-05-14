@@ -53,7 +53,7 @@ uv run --extra test pytest -q
 - Quality gate writes `quality_gate.md` alongside JSON so pass/fail, alpha, fills, and churn are reviewable without parsing JSON.
 - Public data gate runner supports `--diagnostic-configs`, so high-churn diagnostic replays are generated without counting against the quality gate.
 - Recording split helper: `split-recording` creates time-based replay splits with metadata copied and timestamp-adjusted for split-period sanity checks.
-- Public data gate runner supports `--split-parts`, so split-period sanity replay reports can be generated with the main gate output.
+- Public data gate runner supports `--split-parts` and `--split-diagnostic-configs`, so split-period sanity replay reports can be generated with the main gate output, including diagnostic configs when requested.
 
 ## In Progress
 
@@ -61,13 +61,13 @@ uv run --extra test pytest -q
 - Recording output: `data/raw/bitbank_btc_jpy_25h_retry_20260514_204916*.jsonl`.
 - Started: 2026-05-14 20:49:16 JST. Expected completion: around 2026-05-15 21:49 JST.
 - This retry uses `--max-idle-sec 300`, `--max-reconnects 500`, `--heartbeat-interval-sec 60`, and `--prevent-sleep`.
-- Last checked: 2026-05-14 23:08 JST, duration 2.32h, strict recording status `ok_for_replay=true`, stale `false`, sequence violations 0, duration gate `2.32<24h`, current file size about 63.2 MB.
+- Last checked: 2026-05-14 23:15 JST, duration 2.43h, strict recording status `ok_for_replay=true`, stale `false`, sequence violations 0, duration gate `2.43<24h`, current file size about 66.2 MB.
 - `powercfg /requests` shows a `SYSTEM` request from the uv-managed Python recorder process, so `--prevent-sleep` is active while the process is alive.
 - At 2026-05-14 21:07 JST, the active Windows power plan was also changed locally for the recording: AC auto sleep disabled and AC hybrid sleep disabled. Before/after snapshots are under `data/logs/powercfg_*_25h_retry_20260514_204916.json`.
 - Keep AC power connected during the recording. DC/battery sleep policy was not changed, and lid-close sleep can still override process-level prevention on some Windows setups.
 - After the gate finishes, restore normal AC sleep policy if desired with `powercfg /change standby-timeout-ac 120`, `powercfg /setacvalueindex SCHEME_CURRENT SUB_SLEEP HYBRIDSLEEP 1`, and `powercfg /setactive SCHEME_CURRENT`.
-- Completion watcher was replaced again at 2026-05-14 23:07 JST without stopping the recorder. Active watcher PID is 35324; old watcher PID 22604 was stopped after the new watcher started.
-- The active watcher should run `run-public-data-gate --require-min-duration-before-replay --prevent-sleep --split-parts 2` after the 25h recorder exits, with quality configs `configs/default.yaml` and `configs/diagnostic_controlled_churn.yaml`, plus diagnostic configs `configs/diagnostic_relaxed_activation.yaml` and `configs/diagnostic_low_churn_18h_candidate.yaml`.
+- Completion watcher was replaced again at 2026-05-14 23:14 JST without stopping the recorder. Active watcher PID is 20144; old watcher PID 35324 was stopped after the new watcher started.
+- The active watcher should run `run-public-data-gate --require-min-duration-before-replay --prevent-sleep --split-parts 2 --split-diagnostic-configs` after the 25h recorder exits, with quality configs `configs/default.yaml` and `configs/diagnostic_controlled_churn.yaml`, plus diagnostic configs `configs/diagnostic_relaxed_activation.yaml` and `configs/diagnostic_low_churn_18h_candidate.yaml`.
 - Expected gate output: `data/reports/bitbank_btc_jpy_25h_retry_20260514_204916_gate`.
 - Previous 24h attempt `data/raw/bitbank_btc_jpy_24h_20260512_234537*.jsonl` failed the duration gate at 18.43h. Root cause candidate: the recorder process lived until the 24h timeout, but market events stopped around 18.43h; idle watchdog was added before this retry.
 - No remaining code-only TODO is currently in progress; the active gate is real public data collection and validation.
@@ -199,6 +199,8 @@ Split-period sanity check for `configs/diagnostic_low_churn_18h_candidate.yaml`:
 - Interpretation: the low-churn candidate did not completely collapse out-of-sample across the half split, but the evidence is still too thin because the second half has only 1 fill and the full 18h sample has only 3 fills.
 - Added and smoke-tested `run-public-data-gate --split-parts 2` on the same 18.43h files, writing split files and split sanity replay reports under `data/reports/bitbank_btc_jpy_18h_split_gate_smoke_20260514_2310`.
 - The split gate smoke reproduced the full-sample low-churn result of 506 virtual orders and 3 fills, plus split sanity replays with first-half 180 orders / 3 fills and second-half 332 orders / 1 fill. The quality gate still failed as expected because one quality config is below `min_report_count=2` and 3 fills is below the 30-fill minimum.
+- Added and smoke-tested `run-public-data-gate --split-parts 2 --split-diagnostic-configs` on the 5.92h recording under `data/reports/bitbank_btc_jpy_5h_split_diagnostic_gate_smoke_20260514_2320`.
+- The diagnostic split smoke generated 4 split sanity replays: quality/default produced 0 fills in both halves, while diagnostic low-churn produced 0 fills / 138 orders in the first half and 1 fill / 103 orders in the second half. The gate failed as expected because the quality config still had no fills/alpha.
 
 ## Do Not Do Yet
 
@@ -289,7 +291,8 @@ uv run ghost-amm run-public-data-gate `
   --out data/reports/bitbank_btc_jpy_25h_gate `
   --require-min-duration-before-replay `
   --prevent-sleep `
-  --split-parts 2
+  --split-parts 2 `
+  --split-diagnostic-configs
 ```
 
 ## Pre-Live Completion Gates

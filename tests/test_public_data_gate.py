@@ -140,6 +140,40 @@ def test_run_public_data_gate_can_write_split_replays(tmp_path, capsys) -> None:
     assert (out / "split_02_01_default" / "summary.json").exists()
 
 
+def test_run_public_data_gate_can_include_diagnostic_split_replays(tmp_path, capsys) -> None:
+    recording = tmp_path / "recording.jsonl"
+    out = tmp_path / "gate"
+    config = Path("configs/default.yaml")
+    write_jsonl(recording, _valid_split_recording_events())
+
+    code = main(
+        [
+            "run-public-data-gate",
+            "--events",
+            str(recording),
+            "--configs",
+            str(config),
+            "--diagnostic-configs",
+            str(config),
+            "--out",
+            str(out),
+            "--split-parts",
+            "2",
+            "--split-diagnostic-configs",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 1
+    assert len(payload["diagnostic_replays"]) == 1
+    assert len(payload["split_replays"]) == 4
+    assert {item["source_role"] for item in payload["split_replays"]} == {"quality_gate", "diagnostic"}
+    assert (out / "split_01_quality_gate_01_default" / "summary.json").exists()
+    assert (out / "split_01_diagnostic_01_default" / "summary.json").exists()
+    assert (out / "split_02_quality_gate_01_default" / "summary.json").exists()
+    assert (out / "split_02_diagnostic_01_default" / "summary.json").exists()
+
+
 def _valid_recording_events(*, include_ticker: bool = True, include_trade: bool = True):
     events = [
         pair_spec_event(fallback_btc_jpy_spec(), ts_ms=1000),
