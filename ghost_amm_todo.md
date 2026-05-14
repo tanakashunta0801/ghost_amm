@@ -62,6 +62,7 @@ uv run --extra test pytest -q
 - Last checked: 2026-05-14 20:55 JST, duration 0.11h, strict recording status `ok_for_replay=true`, stale `false`, sequence violations 0, duration gate `0.11<24h`.
 - `powercfg /requests` shows a `SYSTEM` request from the uv-managed Python recorder process, so `--prevent-sleep` is active while the process is alive.
 - At 2026-05-14 21:07 JST, the active Windows power plan was also changed locally for the recording: AC auto sleep disabled and AC hybrid sleep disabled. Before/after snapshots are under `data/logs/powercfg_*_25h_retry_20260514_204916.json`.
+- After the gate finishes, restore normal AC sleep policy if desired with `powercfg /change standby-timeout-ac 120`, `powercfg /setacvalueindex SCHEME_CURRENT SUB_SLEEP HYBRIDSLEEP 1`, and `powercfg /setactive SCHEME_CURRENT`.
 - Completion watcher is running locally and should run `run-public-data-gate --require-min-duration-before-replay --prevent-sleep` after the 25h recorder exits.
 - Expected gate output: `data/reports/bitbank_btc_jpy_25h_retry_20260514_204916_gate`.
 - Previous 24h attempt `data/raw/bitbank_btc_jpy_24h_20260512_234537*.jsonl` failed the duration gate at 18.43h. Root cause candidate: the recorder process lived until the 24h timeout, but market events stopped around 18.43h; idle watchdog was added before this retry.
